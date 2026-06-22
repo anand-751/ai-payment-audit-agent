@@ -1,0 +1,18 @@
+fastapi
+uvicorn[standard]
+pandas
+sqlalchemy
+python-dotenv
+python-multipart
+pydantic
+pydantic-settings
+langgraph
+openai
+reportlab
+
+# SQLite comes with Python
+
+# Optional but recommended
+httpx
+requests
+python-jose[cryptography]

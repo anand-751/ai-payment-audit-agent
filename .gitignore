@@ -1,0 +1,37 @@
+# macOS
+.DS_Store
+
+# Python
+backend/venv/
+backend/__pycache__/
+**/__pycache__/
+*.pyc
+
+# React
+frontend/node_modules/
+frontend/dist/
+
+# Environment
+.env
+backend/.env
+frontend/.env
+frontend/.env.production
+
+# Python virtual envs
+venv/
+.envrc
+
+# SQLite (keep only if you DON'T want the DB in Git)
+# *.db
+
+# Uploads
+backend/uploads/
+
+# Exports
+backend/exports/
+
+# VS Code
+.vscode/
+
+# Logs
+*.log
