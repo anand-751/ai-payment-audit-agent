@@ -2,7 +2,6 @@
 // REAL BACKEND AUTH (FastAPI + JWT)
 // ─────────────────────────────────────────────────────────────
 
-// Change this block:
 const API_BASE = "/api";
 
 const TOKEN_KEY = "pcs_auth_token";
