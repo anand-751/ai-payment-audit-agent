@@ -2,9 +2,8 @@
 // REAL BACKEND AUTH (FastAPI + JWT)
 // ─────────────────────────────────────────────────────────────
 
-const API_BASE =
-  import.meta.env.VITE_API_BASE ||
-  "http://localhost:8000";
+// Change this block:
+const API_BASE = "/api";
 
 const TOKEN_KEY = "pcs_auth_token";
 
