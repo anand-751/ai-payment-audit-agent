@@ -1,12 +1,15 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pathlib import Path
 
+BASE_DIR = Path(__file__).resolve().parent
+DEFAULT_DB = str(BASE_DIR / "db" / "payment_audit.db")
 
 class Settings(BaseSettings):
 
     APP_NAME: str = "Payment Audit Agent"
 
-    DB_PATH: str = "app/db/payment_audit.db"
-
+    DB_PATH: str = DEFAULT_DB
+    
     GROQ_API_KEY: str = ""
 
     SMTP_EMAIL: str = ""
