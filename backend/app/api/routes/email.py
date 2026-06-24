@@ -378,7 +378,7 @@ class EmailRequest(BaseModel):
     comment: str
 
 def _send_email(msg: EmailMessage) -> None:
-"""Sends the email in the background so the HTTP request returns instantly (prevents 504)."""
+    """Sends the email in the background so the HTTP request returns instantly (prevents 504)."""
     try:
         with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=20) as smtp:
         smtp.login(SMTP_EMAIL, SMTP_PASSWORD)
