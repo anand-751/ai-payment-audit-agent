@@ -381,9 +381,9 @@ def _send_email(msg: EmailMessage) -> None:
     """Sends the email in the background so the HTTP request returns instantly (prevents 504)."""
     try:
         with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=20) as smtp:
-        smtp.login(SMTP_EMAIL, SMTP_PASSWORD)
-        smtp.send_message(msg)
-        print(f"[email] Sent to {msg['To']}")
+            smtp.login(SMTP_EMAIL, SMTP_PASSWORD)
+            smtp.send_message(msg)
+            print(f"[email] Sent to {msg['To']}")
     except smtplib.SMTPAuthenticationError:
         print("[email] FAILED: Invalid Gmail App Password")
     except Exception as e:
