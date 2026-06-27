@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-​
+
 from app.routes.auth_routes import router as auth_router
 from app.routes.websocket_routes import router as websocket_router
 from app.api.routes.upload import (
@@ -15,7 +15,7 @@ from app.api.routes.email import (
 from app.api.routes.decision import (
     router as decision_router
 )
-​
+
 # DB bootstrap dependencies. These imports already work elsewhere in the app,
 # so init runs reliably regardless of whether app/db is a package.
 import os
@@ -23,10 +23,10 @@ import shutil
 from pathlib import Path
 from app.config import settings
 from app.core.database import get_db_connection
-​
+
 print("MAIN.PY LOADED")
-​
-​
+
+
 # ---------------------------------------------------------------------------
 # INLINE DATABASE INITIALIZER
 # Creates every table/column/index, seeds users, and loads reference data on
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS payment_batches (
     file_path TEXT,
     cfo_comment TEXT
 );
-​
+
 CREATE TABLE IF NOT EXISTS payment_items (
     payment_id TEXT NOT NULL,
     batch_id TEXT NOT NULL,
@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS payment_items (
     PRIMARY KEY (batch_id, payment_id),
     FOREIGN KEY (batch_id) REFERENCES payment_batches(batch_id)
 );
-​
+
 CREATE TABLE IF NOT EXISTS payment_history (
     history_id INTEGER PRIMARY KEY AUTOINCREMENT,
     invoice_number TEXT NOT NULL,
@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS payment_history (
     status TEXT,
     bank_routing_used TEXT
 );
-​
+
 CREATE TABLE IF NOT EXISTS vendor_master (
     vendor_id TEXT PRIMARY KEY,
     vendor_name TEXT NOT NULL,
@@ -82,13 +82,13 @@ CREATE TABLE IF NOT EXISTS vendor_master (
     payment_terms TEXT,
     is_active BOOLEAN
 );
-​
+
 CREATE TABLE IF NOT EXISTS invoice_register (
     payment_id TEXT PRIMARY KEY,
     invoice_number TEXT NOT NULL,
     approved_invoice_amount REAL NOT NULL
 );
-​
+
 CREATE TABLE IF NOT EXISTS audit_results (
     audit_id INTEGER PRIMARY KEY AUTOINCREMENT,
     batch_id TEXT NOT NULL,
@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS audit_results (
     reason TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-​
+
 CREATE TABLE IF NOT EXISTS batch_decision_history (
     decision_id INTEGER PRIMARY KEY AUTOINCREMENT,
     batch_id TEXT NOT NULL,
@@ -108,7 +108,7 @@ CREATE TABLE IF NOT EXISTS batch_decision_history (
     decided_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     comment TEXT
 );
-​
+
 CREATE TABLE IF NOT EXISTS notifications (
     notification_id INTEGER PRIMARY KEY AUTOINCREMENT,
     batch_id TEXT,
@@ -120,30 +120,30 @@ CREATE TABLE IF NOT EXISTS notifications (
     is_read INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-​
+
 CREATE TABLE IF NOT EXISTS users (
     username TEXT PRIMARY KEY,
     password_hash TEXT NOT NULL,
     role TEXT,
     full_name TEXT
 );
-​
+
 CREATE INDEX IF NOT EXISTS idx_history_invoice ON payment_history(invoice_number);
 CREATE INDEX IF NOT EXISTS idx_vendor_id ON vendor_master(vendor_id);
 CREATE INDEX IF NOT EXISTS idx_payment_vendor ON payment_items(vendor_id);
 CREATE INDEX IF NOT EXISTS idx_batch_id ON payment_items(batch_id);
 """
-​
+
 REFERENCE_TABLES = ("vendor_master", "invoice_register", "payment_history")
-​
-​
+
+
 def _ensure_column(cur, table, column, ddl_type):
     cur.execute(f"PRAGMA table_info({table})")
     existing = {row[1] for row in cur.fetchall()}
     if column not in existing:
         cur.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}")
-​
-​
+
+
 def _find_seed():
     """Locate the committed seed DB if it shipped in the image. Best-effort."""
     here = Path(__file__).resolve().parent
@@ -157,11 +157,11 @@ def _find_seed():
         if c.exists():
             return c
     return None
-​
-​
+
+
 def _seed_reference_data(conn, cur):
     """Populate vendor_master / invoice_register / payment_history if empty.
-​
+
     Works on an already-created (empty) volume DB. Prefers a committed
     seed_reference.sql text file (cannot be gitignored by *.db rules); falls
     back to copying from a shipped seed .db via ATTACH.
@@ -175,7 +175,7 @@ def _seed_reference_data(conn, cur):
         return
     if force:
         print("RESEED_REFERENCE set -- wiping and reloading reference data")
-​
+
     # --- Option A: replay committed SQL dump (most reliable) ---
     sql_file = Path(__file__).resolve().parent / "seed_reference.sql"
     if sql_file.exists():
@@ -192,7 +192,7 @@ def _seed_reference_data(conn, cur):
             f"(vendors={v}, invoices={i}, history={h})"
         )
         return
-​
+
     # --- Option B: copy from a shipped seed .db via ATTACH ---
     seed = _find_seed()
     if seed is not None:
@@ -204,18 +204,18 @@ def _seed_reference_data(conn, cur):
         cur.execute("DETACH DATABASE seed")
         print(f"REFERENCE DATA LOADED FROM {seed} via ATTACH")
         return
-​
+
     print(
         "WARNING: no reference data source found "
         "(seed_reference.sql / seed .db both missing); vendor_master is EMPTY "
         "-- every payment will flag INVALID_VENDOR."
     )
-​
-​
+
+
 def init_db():
     db_path = Path(settings.DB_PATH)
     db_path.parent.mkdir(parents=True, exist_ok=True)
-​
+
     # First boot on an empty volume: copy a committed seed .db whole if present.
     seed = _find_seed()
     if (
@@ -225,12 +225,12 @@ def init_db():
     ):
         shutil.copy(seed, db_path)
         print(f"SEED DB COPIED FROM {seed}")
-​
+
     conn = get_db_connection()
     cur = conn.cursor()
-​
+
     cur.executescript(SCHEMA_SQL)
-​
+
     _ensure_column(cur, "payment_batches", "file_path", "TEXT")
     _ensure_column(cur, "payment_batches", "cfo_comment", "TEXT")
     _ensure_column(cur, "payment_batches", "audit_json", "TEXT")
@@ -238,7 +238,7 @@ def init_db():
     _ensure_column(cur, "payment_batches", "uploaded_by", "TEXT")
     _ensure_column(cur, "payment_batches", "uploaded_by_name", "TEXT")
     _ensure_column(cur, "notifications", "recipient_user", "TEXT")
-​
+
     seed_users = [
         ("chirag.singh", "AP@Secure2025", "ap", "Chirag Singh"),
         ("robin.preet",  "AP@Secure2025", "ap", "Robin Preet"),
@@ -253,18 +253,18 @@ def init_db():
         seed_users,
     )
     conn.commit()
-​
+
     # Load reference data into the (possibly already-created empty) DB.
     _seed_reference_data(conn, cur)
-​
+
     conn.commit()
     conn.close()
-​
-​
+
+
 app = FastAPI(
     title="Payment Audit Agent"
 )
-​
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -272,21 +272,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-​
-​
+
+
 @app.on_event("startup")
 def _on_startup():
     init_db()
     print("INIT_DB COMPLETE")
-​
-​
+
+
 @app.get("/health")
 def health():
     return {
         "status": "healthy"
     }
-​
-​
+
+
 app.include_router(upload_router)
 app.include_router(decision_router)
 app.include_router(websocket_router)

@@ -1,25 +1,25 @@
 from app.services.websocket_manager import manager
 from fastapi import APIRouter
 from pydantic import BaseModel
-​
+
 from app.core.database import get_db_connection
-​
+
 router = APIRouter()
-​
-​
+
+
 class DecisionRequest(BaseModel):
     batch_id: str
     file_name: str
     decision: str
     comment: str = ""
-​
-​
+
+
 @router.post("/batch-decision")
 async def save_decision(req: DecisionRequest):
-​
+
     conn = get_db_connection()
     cur = conn.cursor()
-​
+
     # update batch status
     cur.execute(
         """
@@ -32,7 +32,7 @@ async def save_decision(req: DecisionRequest):
             req.batch_id
         )
     )
-​
+
     # insert decision history
     cur.execute(
         """
@@ -54,13 +54,13 @@ async def save_decision(req: DecisionRequest):
             req.comment
         )
     )
-​
+
     # ------------------------------------------------------------------
     # NOTIFY THE AP TEAM about the CFO decision (APPROVED or REJECTED).
     # The AP frontend polls GET /notifications?role=ap and shows these.
     # ------------------------------------------------------------------
     nice = "approved" if req.decision == "APPROVED" else "rejected"
-​
+
     # Find the AP user who uploaded this batch so the decision notification
     # goes ONLY to them (not every AP user).
     cur.execute(
@@ -71,7 +71,7 @@ async def save_decision(req: DecisionRequest):
     uploader = None
     if _b is not None and "uploaded_by" in _b.keys():
         uploader = _b["uploaded_by"]
-​
+
     cur.execute(
         """
         INSERT INTO notifications
@@ -86,10 +86,10 @@ async def save_decision(req: DecisionRequest):
             req.decision,
         ),
     )
-​
+
     conn.commit()
     conn.close()
-​
+
     # Best-effort real-time push (in addition to the DB notification above).
     # Wrapped so a websocket hiccup never fails the decision request.
     try:
@@ -104,18 +104,18 @@ async def save_decision(req: DecisionRequest):
         )
     except Exception:
         pass
-​
+
     return {
         "success": True
     }
-​
-​
+
+
 @router.get("/decision-history")
 def get_history():
-​
+
     conn = get_db_connection()
     cur = conn.cursor()
-​
+
     cur.execute(
         """
         SELECT
@@ -130,17 +130,17 @@ def get_history():
         LIMIT 7
         """
     )
-​
+
     rows = [dict(r) for r in cur.fetchall()]
-​
+
     conn.close()
-​
+
     return {
         "success": True,
         "data": rows
     }
-​
-​
+
+
 # ---------------------------------------------------
 # NOTIFICATIONS FEED
 # GET /notifications?role=cfo|ap  -> recent notifications for that role
@@ -148,10 +148,10 @@ def get_history():
 # ---------------------------------------------------
 @router.get("/notifications")
 def get_notifications(role: str, user: str = None):
-​
+
     conn = get_db_connection()
     cur = conn.cursor()
-​
+
     # AP users only see notifications addressed to them specifically
     # (recipient_user). Older/un-targeted rows (NULL) stay visible to all AP
     # so nothing silently disappears. CFO stays role-based.
@@ -194,32 +194,31 @@ def get_notifications(role: str, user: str = None):
             """,
             (role,),
         )
-​
+
     rows = [dict(r) for r in cur.fetchall()]
-​
+
     conn.close()
-​
+
     return {
         "success": True,
         "data": rows
     }
-​
-​
+
+
 @router.post("/notifications/{notification_id}/read")
 def mark_notification_read(notification_id: int):
-​
+
     conn = get_db_connection()
     cur = conn.cursor()
-​
+
     cur.execute(
         "UPDATE notifications SET is_read = 1 WHERE notification_id = ?",
         (notification_id,),
     )
-​
+
     conn.commit()
     conn.close()
-​
+
     return {
         "success": True
     }
-​
