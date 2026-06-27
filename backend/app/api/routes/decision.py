@@ -1,25 +1,26 @@
+from app.services.websocket_manager import manager
 from fastapi import APIRouter
 from pydantic import BaseModel
-
+​
 from app.core.database import get_db_connection
-from app.services.websocket_manager import manager
-
+​
 router = APIRouter()
-
-
+​
+​
 class DecisionRequest(BaseModel):
     batch_id: str
     file_name: str
     decision: str
     comment: str = ""
-
-
+​
+​
 @router.post("/batch-decision")
 async def save_decision(req: DecisionRequest):
+​
     conn = get_db_connection()
     cur = conn.cursor()
-
-    # Update batch status
+​
+    # update batch status
     cur.execute(
         """
         UPDATE payment_batches
@@ -28,11 +29,11 @@ async def save_decision(req: DecisionRequest):
         """,
         (
             req.decision,
-            req.batch_id,
-        ),
+            req.batch_id
+        )
     )
-
-    # Insert decision history
+​
+    # insert decision history
     cur.execute(
         """
         INSERT INTO batch_decision_history
@@ -50,35 +51,58 @@ async def save_decision(req: DecisionRequest):
             req.file_name,
             req.decision,
             "JAMES WALKER",
-            req.comment,
+            req.comment
+        )
+    )
+​
+    # ------------------------------------------------------------------
+    # NOTIFY THE AP TEAM about the CFO decision (APPROVED or REJECTED).
+    # The AP frontend polls GET /notifications?role=ap and shows these.
+    # ------------------------------------------------------------------
+    nice = "approved" if req.decision == "APPROVED" else "rejected"
+    cur.execute(
+        """
+        INSERT INTO notifications
+            (batch_id, recipient_role, notification_type, title, message, decision)
+        VALUES (?, 'ap', 'DECISION', ?, ?, ?)
+        """,
+        (
+            req.batch_id,
+            f"Batch {nice} by CFO",
+            f"Batch {req.file_name} was {nice} by the CFO",
+            req.decision,
         ),
     )
-
+​
     conn.commit()
     conn.close()
-
-    # Notify AP Manager when CFO rejects a batch
-    if req.decision == "REJECTED":
+​
+    # Best-effort real-time push (in addition to the DB notification above).
+    # Wrapped so a websocket hiccup never fails the decision request.
+    try:
         await manager.notify_role(
             "ap",
             {
-                "type": "REJECTED",
+                "type": req.decision,
                 "batch_id": req.batch_id,
                 "file_name": req.file_name,
-                "message": "Rejected by CFO",
+                "message": f"Batch {nice} by CFO",
             },
         )
-
+    except Exception:
+        pass
+​
     return {
-        "success": True,
+        "success": True
     }
-
-
+​
+​
 @router.get("/decision-history")
 def get_history():
+​
     conn = get_db_connection()
     cur = conn.cursor()
-
+​
     cur.execute(
         """
         SELECT
@@ -93,11 +117,71 @@ def get_history():
         LIMIT 7
         """
     )
-
-    rows = [dict(row) for row in cur.fetchall()]
+​
+    rows = [dict(r) for r in cur.fetchall()]
+​
     conn.close()
-
+​
     return {
         "success": True,
-        "data": rows,
+        "data": rows
+    }
+​
+​
+# ---------------------------------------------------
+# NOTIFICATIONS FEED
+# GET /notifications?role=cfo|ap  -> recent notifications for that role
+# POST /notifications/{id}/read   -> mark one as read
+# ---------------------------------------------------
+@router.get("/notifications")
+def get_notifications(role: str):
+​
+    conn = get_db_connection()
+    cur = conn.cursor()
+​
+    cur.execute(
+        """
+        SELECT
+            notification_id,
+            batch_id,
+            notification_type,
+            title,
+            message,
+            decision,
+            is_read,
+            created_at
+        FROM notifications
+        WHERE recipient_role = ?
+        ORDER BY created_at DESC
+        LIMIT 20
+        """,
+        (role,),
+    )
+​
+    rows = [dict(r) for r in cur.fetchall()]
+​
+    conn.close()
+​
+    return {
+        "success": True,
+        "data": rows
+    }
+​
+​
+@router.post("/notifications/{notification_id}/read")
+def mark_notification_read(notification_id: int):
+​
+    conn = get_db_connection()
+    cur = conn.cursor()
+​
+    cur.execute(
+        "UPDATE notifications SET is_read = 1 WHERE notification_id = ?",
+        (notification_id,),
+    )
+​
+    conn.commit()
+    conn.close()
+​
+    return {
+        "success": True
     }

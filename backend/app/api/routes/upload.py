@@ -162,7 +162,6 @@
 #     return {"batches": batches}
 
 
-
 import io
 import os
 import json
@@ -218,6 +217,29 @@ async def upload_payment_batch(files: list[UploadFile] = File(...)):
                 "batch_id": batch_id,
                 "batch_info": result
             })
+​
+        # ------------------------------------------------------------------
+        # NOTIFY THE CFO: one notification row per uploaded batch.
+        # The CFO frontend polls GET /notifications?role=cfo and shows these.
+        # ------------------------------------------------------------------
+        if uploaded_batches:
+            conn = get_db_connection()
+            cur = conn.cursor()
+            for b in uploaded_batches:
+                cur.execute(
+                    """
+                    INSERT INTO notifications
+                        (batch_id, recipient_role, notification_type, title, message)
+                    VALUES (?, 'cfo', 'NEW_BATCH', ?, ?)
+                    """,
+                    (
+                        b["batch_id"],
+                        "New batch submitted",
+                        f"Batch {b['file_name']} was submitted by AP for review",
+                    ),
+                )
+            conn.commit()
+            conn.close()
 ​
         return {
             "success": True,
@@ -329,7 +351,7 @@ async def list_batches():
 ​
 ​
 # ---------------------------------------------------
-# GET FULL BATCH DETAIL  (NEW — step 7)
+# GET FULL BATCH DETAIL  (step 7)
 # Read-only: returns the stored audit pack so the CFO can open ANY batch
 # (including ones uploaded by someone else) without re-running the audit.
 # ---------------------------------------------------

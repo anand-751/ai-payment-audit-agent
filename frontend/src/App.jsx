@@ -47,11 +47,38 @@ export default function App() {
     }
   };
 ​
+  // ── Load notifications for the current role (CFO sees new-batch alerts,
+  //    AP sees approved/rejected alerts). Backend-driven so it works cross-device.
+  const fetchNotifications = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/notifications?role=${user.role}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setNotifications(
+        (data.data || []).map((n) => ({
+          id: n.notification_id,
+          batchNo: n.batch_id,
+          file: n.batch_id,
+          decision: n.decision,
+          message: n.message || n.title,
+          is_read: !!n.is_read,
+          createdAt: n.created_at,
+        }))
+      );
+    } catch (err) {
+      console.error("Failed to load notifications", err);
+    }
+  };
+​
   // Poll so AP uploads appear for the CFO automatically (no re-login needed)
   useEffect(() => {
     if (!user) return;
     fetchBatches();
-    const id = setInterval(fetchBatches, 5000);
+    fetchNotifications();
+    const id = setInterval(() => {
+      fetchBatches();
+      fetchNotifications();
+    }, 5000);
     return () => clearInterval(id);
   }, [user]);
 ​
@@ -163,21 +190,7 @@ export default function App() {
       prev.map((b) => (b.id === batch.id ? { ...b, status: finalDecision } : b))
     );
     fetchBatches();
-​
-    if (decision === "REJECT") {
-      setNotifications((prev) => [
-        {
-          id: Date.now(),
-          batchNo: batch.id,
-          file: batch.file,
-          decision: "REJECTED",
-          message: "Rejected by CFO",
-          is_read: false,
-          createdAt: new Date().toISOString(),
-        },
-        ...prev,
-      ]);
-    }
+    fetchNotifications();
 ​
     setTimeout(() => setSelectedBatch(null), 2200);
   };
@@ -192,6 +205,14 @@ export default function App() {
   const handleOpenNotifications = () => {
     setShowNotifications((prev) => !prev);
     setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    // Persist read-state to the backend so the badge stays cleared after refresh
+    notifications
+      .filter((n) => !n.is_read)
+      .forEach((n) => {
+        fetch(`${API_BASE}/notifications/${n.id}/read`, { method: "POST" }).catch(
+          () => {}
+        );
+      });
   };
 ​
   if (!user) {
