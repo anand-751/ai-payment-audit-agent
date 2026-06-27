@@ -166,8 +166,10 @@ def init_db():
 ​
     # Seed AP users (stored as PLAINTEXT to match the current auth_service check)
     seed_users = [
+        ("james.walker", "CFO@Secure2025", "cfo", "James Walker"),
+        ("anand.choudhary", "AP@Secure2025", "ap", "Anand Choudhary"),
         ("chirag.singh", "AP@Secure2025", "ap", "Chirag Singh"),
-        ("robin.preet",  "AP@Secure2025", "ap", "Robin Preet"),
+        ("robin.preet", "AP@Secure2025", "ap", "Robin Preet"),
     ]
     cur.executemany(
         """INSERT INTO users (username, password_hash, role, full_name)
