@@ -240,8 +240,10 @@ def init_db():
     _ensure_column(cur, "notifications", "recipient_user", "TEXT")
 
     seed_users = [
+        ("james.walker", "CFO@Secure2025", "cfo", "James Walker"),
+        ("anand.choudhary", "AP@Secure2025", "ap", "Anand Choudhary"),
         ("chirag.singh", "AP@Secure2025", "ap", "Chirag Singh"),
-        ("robin.preet",  "AP@Secure2025", "ap", "Robin Preet"),
+        ("robin.preet", "AP@Secure2025", "ap", "Robin Preet"),
     ]
     cur.executemany(
         """INSERT INTO users (username, password_hash, role, full_name)
