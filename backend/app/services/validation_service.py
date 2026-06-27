@@ -9,6 +9,7 @@ from app.core.database import get_db_connection
 from app.services.decision_service import (
     generate_audit_metadata,
     update_batch_status,
+    save_audit_result,
 )
 
 load_dotenv()
@@ -623,6 +624,8 @@ def validate_payment_batch(batch_id: str):
             "cfo_summary": cfo_summary,
         }
 
+        save_audit_result(batch_id, response)
+        
         # ----------------------------------
         # Memory Cleanup
         # ----------------------------------

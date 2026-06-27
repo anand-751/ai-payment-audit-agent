@@ -1,14 +1,10 @@
-import sqlite3
-from pathlib import Path
-from app.services.websocket_manager import manager
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-router = APIRouter()
+from app.core.database import get_db_connection
+from app.services.websocket_manager import manager
 
-# Database path relative to project structure
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
-DB_PATH = BASE_DIR / "db" / "payment_audit.db"
+router = APIRouter()
 
 
 class DecisionRequest(BaseModel):
@@ -17,14 +13,13 @@ class DecisionRequest(BaseModel):
     decision: str
     comment: str = ""
 
+
 @router.post("/batch-decision")
 async def save_decision(req: DecisionRequest):
-
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_db_connection()
     cur = conn.cursor()
 
-    # update batch status
-
+    # Update batch status
     cur.execute(
         """
         UPDATE payment_batches
@@ -33,12 +28,11 @@ async def save_decision(req: DecisionRequest):
         """,
         (
             req.decision,
-            req.batch_id
-        )
+            req.batch_id,
+        ),
     )
 
-    # insert history
-
+    # Insert decision history
     cur.execute(
         """
         INSERT INTO batch_decision_history
@@ -56,37 +50,33 @@ async def save_decision(req: DecisionRequest):
             req.file_name,
             req.decision,
             "JAMES WALKER",
-            req.comment
-        )
+            req.comment,
+        ),
     )
 
     conn.commit()
     conn.close()
 
+    # Notify AP Manager when CFO rejects a batch
     if req.decision == "REJECTED":
-
         await manager.notify_role(
             "ap",
             {
                 "type": "REJECTED",
                 "batch_id": req.batch_id,
                 "file_name": req.file_name,
-                "message": "Rejected by CFO"
-            }
-        )  
+                "message": "Rejected by CFO",
+            },
+        )
 
     return {
-        "success": True
+        "success": True,
     }
 
 
 @router.get("/decision-history")
 def get_history():
-
-    conn = sqlite3.connect(str(DB_PATH))
-
-    conn.row_factory = sqlite3.Row
-
+    conn = get_db_connection()
     cur = conn.cursor()
 
     cur.execute(
@@ -104,11 +94,10 @@ def get_history():
         """
     )
 
-    rows = [dict(r) for r in cur.fetchall()]
-
+    rows = [dict(row) for row in cur.fetchall()]
     conn.close()
 
     return {
         "success": True,
-        "data": rows
+        "data": rows,
     }
