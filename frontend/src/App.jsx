@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-​
+
 // ── Utils & constants ──────────────────────────────────────────────
 import { getSession, logout } from "./components/auth";
-​
+
 // ── Components ─────────────────────────────────────────────────────
 import { GlobalStyles } from "./components/GlobalStyles";
 import { TopBar } from "./components/TopBar";
@@ -11,24 +11,24 @@ import { APPortal } from "./components/APPortal";
 import { CFOBatchList } from "./components/CFOBatchList";
 import { CFODashboard } from "./components/CFODashboard";
 import { HistoryModal } from "./components/HistoryModal";
-​
+
 const API_BASE = "/api";
-​
+
 export default function App() {
   const [user, setUser] = useState(() => getSession());
-​
+
   const [batches, setBatches] = useState([]);
   const [selectedBatch, setSelectedBatch] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [historyRows, setHistoryRows] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
-​
+
   useEffect(() => {
     const session = getSession();
     if (session) setUser(session);
   }, []);
-​
+
   // ── Load batches from the backend DB (this is what was missing) ─────────────
   // Merges server data (source of truth, incl. status) with any in-memory audit
   // detail (metadata/violations) we already have from this session's uploads.
@@ -46,7 +46,7 @@ export default function App() {
       console.error("Failed to load batches", err);
     }
   };
-​
+
   // ── Load notifications for the current role (CFO sees new-batch alerts,
   //    AP sees approved/rejected alerts). Backend-driven so it works cross-device.
   const fetchNotifications = async () => {
@@ -69,7 +69,7 @@ export default function App() {
       console.error("Failed to load notifications", err);
     }
   };
-​
+
   // Poll so AP uploads appear for the CFO automatically (no re-login needed)
   useEffect(() => {
     if (!user) return;
@@ -81,37 +81,37 @@ export default function App() {
     }, 5000);
     return () => clearInterval(id);
   }, [user]);
-​
+
   const handleLogin = (userPayload) => {
     setUser(userPayload);
   };
-​
+
   const handleLogout = () => {
     logout();
     setUser(null);
     setSelectedBatch(null);
   };
-​
+
   const handleUpload = async (files) => {
     const formData = new FormData();
     files.forEach((file) => {
       formData.append("files", file);
     });
-​
+
     const uploadRes = await fetch(`${API_BASE}/upload-payment-batch`, {
       method: "POST",
       body: formData,
     });
-​
+
     const uploadData = await uploadRes.json();
     if (!uploadRes.ok) {
       throw new Error(
         uploadData.detail || uploadData.message || "Failed to upload batch."
       );
     }
-​
+
     const uploadedBatches = uploadData.data;
-​
+
     for (const uploaded of uploadedBatches) {
       const batchId = uploaded.batch_id;
       const auditRes = await fetch(`${API_BASE}/run-audit/${batchId}`, {
@@ -124,11 +124,11 @@ export default function App() {
         );
       }
     }
-​
+
     // Pull fresh truth from the backend so the new batch(es) show up everywhere
     await fetchBatches();
   };
-​
+
   // ── Open a batch: use in-memory detail if present, else load from backend ────
   const handleSelectBatch = async (batch) => {
     if (batch.metadata && batch.violations) {
@@ -157,10 +157,10 @@ export default function App() {
       cfo_summary: "Detail endpoint not available yet.",
     });
   };
-​
+
   const handleDecision = async (batch, decision, comment) => {
     const finalDecision = decision === "AUTHORIZE" ? "APPROVED" : "REJECTED";
-​
+
     await fetch(`${API_BASE}/batch-decision`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -171,37 +171,37 @@ export default function App() {
         comment,
       }),
     });
-​
+
     if (decision === "AUTHORIZE") {
       const emailRes = await fetch(`${API_BASE}/authorize-disbursement`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ batch_id: batch.id, comment }),
       });
-​
+
       if (!emailRes.ok) {
         const err = await emailRes.json();
         throw new Error(err.detail || "Failed to send authorization email.");
       }
     }
-​
+
     // Optimistic update, then re-sync with the backend
     setBatches((prev) =>
       prev.map((b) => (b.id === batch.id ? { ...b, status: finalDecision } : b))
     );
     fetchBatches();
     fetchNotifications();
-​
+
     setTimeout(() => setSelectedBatch(null), 2200);
   };
-​
+
   const loadHistory = async () => {
     const res = await fetch(`${API_BASE}/decision-history`);
     const data = await res.json();
     setHistoryRows(data.data || []);
     setShowHistory(true);
   };
-​
+
   const handleOpenNotifications = () => {
     setShowNotifications((prev) => !prev);
     setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
@@ -214,7 +214,7 @@ export default function App() {
         );
       });
   };
-​
+
   if (!user) {
     return (
       <>
@@ -223,11 +223,11 @@ export default function App() {
       </>
     );
   }
-​
+
   return (
     <>
       <GlobalStyles />
-​
+
       <TopBar
         user={user}
         onLogout={handleLogout}
@@ -238,15 +238,15 @@ export default function App() {
         onOpenNotifications={handleOpenNotifications}
         onViewHistory={loadHistory}
       />
-​
+
       {user.role === "ap" && (
         <APPortal batches={batches} onUpload={handleUpload} />
       )}
-​
+
       {user.role === "cfo" && !selectedBatch && (
         <CFOBatchList batches={batches} onSelect={handleSelectBatch} />
       )}
-​
+
       {user.role === "cfo" && selectedBatch && (
         <CFODashboard
           batch={selectedBatch}
@@ -256,7 +256,7 @@ export default function App() {
           onDecision={handleDecision}
         />
       )}
-​
+
       {showHistory && (
         <HistoryModal rows={historyRows} onClose={() => setShowHistory(false)} />
       )}
