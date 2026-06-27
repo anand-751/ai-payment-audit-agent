@@ -18,6 +18,7 @@ from app.api.routes.decision import (
 
 # DB bootstrap dependencies. These imports already work elsewhere in the app,
 # so init runs reliably regardless of whether app/db is a package.
+import os
 import shutil
 from pathlib import Path
 from app.config import settings
@@ -28,9 +29,10 @@ print("MAIN.PY LOADED")
 
 # ---------------------------------------------------------------------------
 # INLINE DATABASE INITIALIZER
-# Creates every table/column/index + seeds users on startup. Idempotent and
-# safe to run on every boot. Inlined here (instead of importing app.db.init_db)
-# so a missing/!package app/db folder can never crash startup again.
+# Creates every table/column/index, seeds users, and loads reference data on
+# startup. Idempotent and safe to run on every boot. Inlined here (instead of
+# importing app.db.init_db) so a missing/!package app/db folder can never crash
+# startup again.
 # ---------------------------------------------------------------------------
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS payment_batches (
@@ -132,6 +134,8 @@ CREATE INDEX IF NOT EXISTS idx_payment_vendor ON payment_items(vendor_id);
 CREATE INDEX IF NOT EXISTS idx_batch_id ON payment_items(batch_id);
 """
 
+REFERENCE_TABLES = ("vendor_master", "invoice_register", "payment_history")
+
 
 def _ensure_column(cur, table, column, ddl_type):
     cur.execute(f"PRAGMA table_info({table})")
@@ -155,13 +159,64 @@ def _find_seed():
     return None
 
 
+def _seed_reference_data(conn, cur):
+    """Populate vendor_master / invoice_register / payment_history if empty.
+
+    Works on an already-created (empty) volume DB. Prefers a committed
+    seed_reference.sql text file (cannot be gitignored by *.db rules); falls
+    back to copying from a shipped seed .db via ATTACH.
+    """
+    force = os.environ.get("RESEED_REFERENCE", "").strip().lower() in (
+        "1", "true", "yes",
+    )
+    cur.execute("SELECT COUNT(*) FROM vendor_master")
+    if cur.fetchone()[0] > 0 and not force:
+        print("REFERENCE DATA ALREADY PRESENT")
+        return
+    if force:
+        print("RESEED_REFERENCE set -- wiping and reloading reference data")
+
+    # --- Option A: replay committed SQL dump (most reliable) ---
+    sql_file = Path(__file__).resolve().parent / "seed_reference.sql"
+    if sql_file.exists():
+        cur.executescript(sql_file.read_text())
+        conn.commit()
+        cur.execute("SELECT COUNT(*) FROM vendor_master")
+        v = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM invoice_register")
+        i = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM payment_history")
+        h = cur.fetchone()[0]
+        print(
+            "REFERENCE DATA LOADED FROM seed_reference.sql "
+            f"(vendors={v}, invoices={i}, history={h})"
+        )
+        return
+
+    # --- Option B: copy from a shipped seed .db via ATTACH ---
+    seed = _find_seed()
+    if seed is not None:
+        conn.commit()  # ATTACH cannot run inside a transaction
+        cur.execute("ATTACH DATABASE ? AS seed", (str(seed),))
+        for tbl in REFERENCE_TABLES:
+            cur.execute(f"INSERT INTO {tbl} SELECT * FROM seed.{tbl}")
+        conn.commit()
+        cur.execute("DETACH DATABASE seed")
+        print(f"REFERENCE DATA LOADED FROM {seed} via ATTACH")
+        return
+
+    print(
+        "WARNING: no reference data source found "
+        "(seed_reference.sql / seed .db both missing); vendor_master is EMPTY "
+        "-- every payment will flag INVALID_VENDOR."
+    )
+
+
 def init_db():
     db_path = Path(settings.DB_PATH)
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # First boot on an empty volume: copy the committed seed DB if we can find
-    # it, so reference data (vendor_master, invoice_register, payment_history)
-    # is present. If no seed is found, we still create empty tables below.
+    # First boot on an empty volume: copy a committed seed .db whole if present.
     seed = _find_seed()
     if (
         not db_path.exists()
@@ -169,9 +224,7 @@ def init_db():
         and db_path.resolve() != seed.resolve()
     ):
         shutil.copy(seed, db_path)
-        print(f"SEED COPIED FROM {seed}")
-    else:
-        print(f"SEED COPY SKIPPED (seed={seed}, db_exists={db_path.exists()})")
+        print(f"SEED DB COPIED FROM {seed}")
 
     conn = get_db_connection()
     cur = conn.cursor()
@@ -195,6 +248,10 @@ def init_db():
                full_name     = excluded.full_name""",
         seed_users,
     )
+    conn.commit()
+
+    # Load reference data into the (possibly already-created empty) DB.
+    _seed_reference_data(conn, cur)
 
     conn.commit()
     conn.close()
