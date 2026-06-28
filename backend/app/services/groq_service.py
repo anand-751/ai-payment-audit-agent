@@ -155,17 +155,44 @@ Bank Routing Exceptions: {metadata['routing_issues']}
 ==========================================================
 YOUR TASK
 ==========================================================
-Write an executive treasury assessment narrative for the CFO using natural language processing in professional financial/treasury terms.
+Write an executive treasury assessment narrative for the CFO in professional financial/treasury terms. One paragraph, plain text, no markdown, no bullet points, maximum 8 sentences.
 
-The narrative must:
-1. State the Recommended Action ({recommended_action}) and Risk Classification ({risk_band}) based on the Batch Integrity Score ({integrity_score:.1f} out of 100).
-2. Frame the risk management strategy based on the integrity score threshold:
-   - If the score is 85 or above: Explain that the risk is low, and it is safe to release the batch. State that the CFO may choose to handle residual exception mitigations directly via management comments and approve/pass the release.
-   - If the score is below 85 (but >= 70): Explain that this represents medium risk.
-   - If the score is below 70: Explain that this represents high risk and requires strict risk mitigations and remediation before any release.
-3. Narrate the control environment by highlighting the number of payments that have exceptions and their specific failure categories (e.g. duplicate payments or missing approvals) using only the provided aggregate counts.
-4. Reference the Total Batch Value and High Risk Exposure to give financial scale.
-5. Provide a strategic treasury recommendation that aligns exactly with the Guidance: "{band_guidance}"
+FOLLOW THESE RULES EXACTLY:
+
+INTEGRITY SCORE — CRITICAL FRAMING RULE:
+- The Batch Integrity Score of {integrity_score:.1f} out of 100 means that {integrity_score:.1f}% of the total payment batch value is considered SAFE for disbursement.
+- The remaining {financial_risk:.1f}% represents the financial risk exposure (blocked or flagged payments).
+- NEVER describe the Integrity Score as a risk indicator, danger signal, or reason for concern by itself.
+- CORRECT example: "The Batch Integrity Score of {integrity_score:.1f} out of 100 indicates that {integrity_score:.1f}% of the batch value is cleared for disbursement, with {financial_risk:.1f}% currently at financial risk exposure."
+- WRONG example: "an integrity score of 69.5 out of 100, indicating a need for immediate attention..."
+
+INDIVIDUAL TRANSACTION IDs — ABSOLUTE BAN:
+- NEVER mention any invoice number, payment ID, vendor ID, vendor name, or any individual transaction identifier in the output.
+- WRONG: "one notable instance of a duplicate invoice, INV-80035"
+- CORRECT: "40 duplicate payment exceptions have been identified"
+
+CONTROL EXCEPTIONS — INCLUDE ALL NON-ZERO COUNTS:
+- You MUST include every control category where the count is greater than zero.
+- This includes: Duplicate Payments, Approval Failures, Vendor Issues, Amount Mismatches, AND Bank Routing Exceptions.
+- If Bank Routing Exceptions is greater than 0, it MUST appear in the narrative.
+
+DISCOUNT OBSERVATIONS — OPERATIONAL ONLY:
+- If Discounts Available > 0, mention it as a positive operational observation.
+- If Discounts Missed > 0, mention it as a missed opportunity observation.
+- Discounts are NEVER a reason to block, hold, or flag a payment.
+
+RISK STRATEGY FRAMING:
+- Score >= 85: LOW RISK — safe to release. CFO may accept residual exceptions via management comments.
+- Score 70–84: MEDIUM RISK — review flagged exceptions before authorizing.
+- Score < 70: HIGH RISK — batch must be held; strict remediation required before any release.
+
+NARRATIVE STRUCTURE (in this order):
+1. State the Recommended Action ({recommended_action}) and Risk Classification ({risk_band}).
+2. State the Integrity Score as % of batch SAFE for disbursement, and the financial risk % exposure.
+3. Give the financial scale: Total Batch Value and High Risk Exposure.
+4. Narrate ALL non-zero control exception categories using only aggregate counts (no individual IDs).
+5. Mention discount observations (available and/or missed) as operational notes if applicable.
+6. Close with the strategic treasury recommendation aligned to: "{band_guidance}"
 """
 
 # ---------------------------------------------------
@@ -184,21 +211,32 @@ def generate_ai_interpretation(metadata):
                     "You write precise, hallucination-free, one-paragraph executive risk "
                     "assessments for a CFO in professional financial/treasury language. "
                     "You narrate overall batch-level risk strategy — never individual payments. "
-                    "You state the risk classification (LOW / MEDIUM / HIGH) based on the "
-                    "Batch Integrity Score out of 100: score >= 85 is LOW RISK and safe to "
-                    "release; score < 85 and >= 70 is MEDIUM RISK; score < 70 is HIGH RISK. "
-                    "For LOW RISK batches you explicitly note that the CFO may accept residual "
-                    "exceptions via management comments and proceed with release. "
-                    "You group control failures by category using only the supplied aggregate "
-                    "counts. You never invent, estimate or alter any figure. "
-                    "You never enumerate individual invoices, payment IDs, vendor IDs or "
-                    "transaction details. You never call the Integrity Score a risk score."
+
+                    "INTEGRITY SCORE FRAMING: The Batch Integrity Score represents the PERCENTAGE "
+                    "OF BATCH VALUE SAFE FOR DISBURSEMENT. A score of 69.5 means 69.5% is safe — "
+                    "it does NOT mean 'high risk' or 'needs immediate attention' by itself. "
+                    "Always frame it as: X% of the batch is cleared for disbursement, Y% is at risk exposure. "
+
+                    "ID BAN: NEVER output any invoice number, payment ID, vendor ID, vendor name, "
+                    "or any individual transaction identifier. Use only aggregate counts per category. "
+
+                    "ROUTING: If Bank Routing Exceptions count is greater than 0, you MUST mention it. "
+
+                    "DISCOUNTS: If discounts available or missed are > 0, mention both as operational "
+                    "observations only — never as payment blockers. "
+
+                    "RISK TIERS: score >= 85 = LOW RISK safe to release; "
+                    "score 70-84 = MEDIUM RISK review before release; "
+                    "score < 70 = HIGH RISK hold and remediate. "
+
+                    "You never invent, estimate or alter any figure. "
+                    "You never call the Integrity Score a risk score or danger signal."
                 ),
             },
             {"role": "user", "content": prompt},
         ],
         temperature=0.1,
-        max_tokens=400,
+        max_tokens=450,
     )
     return response.choices[0].message.content.strip()
 
