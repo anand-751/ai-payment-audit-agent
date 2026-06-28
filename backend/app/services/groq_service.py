@@ -1,41 +1,42 @@
 import os
+import re
 from datetime import datetime
-
+​
 from openai import OpenAI
 from dotenv import load_dotenv
-
+​
 from app.core.database import get_db_connection
 from app.services.decision_service import (
     generate_audit_metadata,
     update_batch_status
 )
-
+​
 load_dotenv()
-
+​
 # ---------------------------------------------------
 # GROQ CLIENT
 # ---------------------------------------------------
-
+​
 client = OpenAI(
     api_key=os.getenv("GROQ_API_KEY"),
     base_url="https://api.groq.com/openai/v1",
 )
-
-
+​
+​
 # ---------------------------------------------------
 # BUILD DETERMINISTIC EXECUTIVE SUMMARY BLOCK
 # (hardcoded figures — LLM cannot touch these)
 # ---------------------------------------------------
-
+​
 def build_executive_block(metadata):
-
+​
     executive_block = f"""
 Batch Integrity Score: {metadata['risk_score']:.1f}%
 Total Batch Value: ${metadata['total_batch_amount']:,.2f}
 High Risk Exposure: ${metadata['high_risk_exposure']:,.2f}
 Total Blocked Payments: {metadata['total_blocked_payments']}
 Decision Status: {metadata['decision']} ({metadata.get('integrity_label', '')})
-
+​
 Duplicate Payments: {metadata['duplicate_count']}
 Unapproved Payments: {metadata['approval_failures']}
 Vendor Issues: {metadata['vendor_issues']}
@@ -46,22 +47,22 @@ Discounts available: {metadata.get('discount_available_count', 0)}
 Discounts missed: {metadata.get('discount_missed_count', 0)}
 """
     return executive_block.strip()
-
-
+​
+​
 # ---------------------------------------------------
 # DERIVE SCORE FIELDS  (single source of truth)
 # ---------------------------------------------------
-
+​
 def _derive_score_fields(metadata):
     """Compute all score-derived fields from raw metadata.
-
+​
     Returns a tuple:
         (integrity_score, financial_risk, risk_band, recommended_action, band_guidance)
     """
     risk_score      = float(metadata["risk_score"])          # 0–100, higher = more risky
     integrity_score = max(0.0, 100.0 - risk_score)           # higher = safer
     financial_risk  = risk_score                             # financial risk % = risk_score
-
+​
     if integrity_score >= 85:
         risk_band          = "LOW RISK"
         recommended_action = metadata.get("decision", "RELEASE")
@@ -85,16 +86,16 @@ def _derive_score_fields(metadata):
             "remediation of all flagged exceptions are required before any release can "
             "be authorized."
         )
-
+​
     return integrity_score, financial_risk, risk_band, recommended_action, band_guidance
-
-
+​
+​
 # ---------------------------------------------------
 # BUILD CONTROLLED LLM PROMPT
 # ---------------------------------------------------
-
+​
 def build_llm_prompt(metadata):
-
+​
     (
         integrity_score,
         financial_risk,
@@ -102,19 +103,19 @@ def build_llm_prompt(metadata):
         recommended_action,
         band_guidance,
     ) = _derive_score_fields(metadata)
-
+​
     if integrity_score >= 85:
         cfo_review_posture = "Low Risk — Authorization Review"
     elif integrity_score >= 70:
         cfo_review_posture = "Medium Risk — Controlled Exception Review"
     else:
         cfo_review_posture = "High Risk — Escalated Mitigation Review"
-
+​
     return f"""
 You are a Senior Treasury Controller preparing an executive payment risk assessment for the Chief Financial Officer (CFO).
-
+​
 The payment validation is already completed by a deterministic control engine. Your only job is to write a concise CFO-ready batch-level treasury risk summary from the validated aggregate metrics.
-
+​
 ==========================================================
 NON-NEGOTIABLE RULES
 ==========================================================
@@ -125,7 +126,7 @@ NON-NEGOTIABLE RULES
 - NEVER use specific-instance wording such as "a specific instance", "one notable invoice", or "the affected vendor".
 - Use ONLY aggregate batch-level counts and control categories.
 - Produce plain text only: one paragraph, no markdown, no bullets, maximum 6 sentences.
-
+​
 ==========================================================
 VALIDATED EXECUTIVE METRICS
 ==========================================================
@@ -137,41 +138,44 @@ Recommended Action: {recommended_action}
 Total Batch Value: ${metadata['total_batch_amount']:,.2f}
 High Risk Exposure: ${metadata['high_risk_exposure']:,.2f}
 Blocked Payments Count: {metadata['total_blocked_payments']}
-
+​
 Duplicate Payment Exceptions: {metadata['duplicate_count']}
 Approval Control Failures: {metadata['approval_failures']}
 Vendor Validation Issues: {metadata['vendor_issues']}
 Amount Validation Issues: {metadata['amount_mismatches']}
 Bank Routing Exceptions: {metadata['routing_issues']}
-
+Discounts Available Count: {metadata.get('discount_available_count', 0)}
+Discounts Missed Count: {metadata.get('discount_missed_count', 0)}
+​
 ==========================================================
 YOUR TASK
 ==========================================================
 Write a short, crisp, CFO-ready treasury risk summary. Use direct executive language. Do not over-explain.
-
+​
 FOLLOW THESE RULES EXACTLY:
-
+​
 REQUIRED FRAMING:
 - Open with the CFO Review Posture: "{cfo_review_posture}".
 - Frame the Batch Integrity Score as safe-for-disbursement value: {integrity_score:.1f}% cleared, {financial_risk:.1f}% at risk exposure.
 - Include Total Batch Value and High Risk Exposure.
 - Include every non-zero control category using aggregate counts only.
-- Discount exceptions are treasury optimization items only, separate from payment authorization risk.
-- Never use "financial leakage", "potential losses", "control failure" for discounts, or any individual-transaction language.
-- Remediation must be category-level: duplicate-payment controls, approval enforcement, vendor validation, amount-matching, and routing verification.
-
+- Use exact validated figures only. Never use "approximately", "around", "about", "estimated", or rounded figures.
+- Discount items are operational optimization opportunities only, separate from authorization risk.
+- Never use "financial leakage", "revenue leakage", "potential losses", "control failure", or "blocker" for discounts.
+- Close with this control strategy: "Mitigation should focus on approval enforcement, duplicate-payment prevention, and amount-validation controls before CFO risk acceptance is considered."
+​
 NARRATIVE STRUCTURE (in this order):
 1. CFO posture and recommended action.
 2. Integrity score as cleared value and financial risk exposure.
 3. Batch value, high-risk exposure, and aggregate exceptions.
-4. Discount observations as treasury optimization only.
-5. Category-level remediation recommendation aligned to: "{band_guidance}"
+4. Discount observations as operational optimization only, using counts only.
+5. Category-level mitigation recommendation aligned to: "{band_guidance}"
 """
-
+​
 # ---------------------------------------------------
 # GENERATE AI INTERPRETATION
 # ---------------------------------------------------
-
+​
 def generate_ai_interpretation(metadata):
     prompt = build_llm_prompt(metadata)
     response = client.chat.completions.create(
@@ -181,13 +185,13 @@ def generate_ai_interpretation(metadata):
                 "role": "system",
                 "content": (
                     "Write one crisp CFO-ready treasury risk paragraph from validated aggregate metrics only. "
-                    "Do not invent, recalculate, or alter figures. "
+                    "Do not invent, recalculate, round, approximate, or alter figures. Never use approximately, around, about, estimated, or roughly. "
                     "Never mention invoice numbers, payment IDs, vendor IDs, vendor names, bank details, routing details, or any specific transaction. "
                     "Never use specific-instance wording. Use only batch-level counts and control categories. "
                     "Open with the CFO review posture. Frame Batch Integrity Score only as value cleared for disbursement, with the remainder as financial risk exposure. "
-                    "Discount exceptions are treasury optimization items only, separate from payment authorization risk; never call them leakage, losses, blockers, or control failures. "
+                    "Discount items are operational optimization opportunities only, separate from authorization risk; never call them financial leakage, revenue leakage, losses, blockers, or control failures. "
                     "For high risk, use: High Risk — Escalated Mitigation Review. "
-                    "Close with category-level remediation: duplicate-payment controls, approval enforcement, vendor validation, amount-matching, and routing verification."
+                    "Close with: Mitigation should focus on approval enforcement, duplicate-payment prevention, and amount-validation controls before CFO risk acceptance is considered."
                 ),
             },
             {"role": "user", "content": prompt},
@@ -195,18 +199,45 @@ def generate_ai_interpretation(metadata):
         temperature=0.1,
         max_tokens=450,
     )
-    return response.choices[0].message.content.strip()
-
-
+    return sanitize_cfo_narrative(response.choices[0].message.content.strip())
+​
+​
+def sanitize_cfo_narrative(text):
+    """Final safety pass to keep the CFO narrative aggregate-level and exact."""
+​
+    forbidden_sentence_patterns = [
+        r"\bINV[-_ ]?\d+\b",
+        r"\bPAY[-_ ]?\d+\b",
+        r"\bpayment\s+id\b",
+        r"\binvoice\s+number\b",
+        r"\bspecific instance\b",
+        r"\bone notable\b",
+        r"\baffected vendor\b",
+    ]
+​
+    sentences = re.split(r"(?<=[.!?])\s+", text.strip())
+    safe_sentences = []
+    for sentence in sentences:
+        if any(re.search(pattern, sentence, flags=re.IGNORECASE) for pattern in forbidden_sentence_patterns):
+            continue
+        safe_sentences.append(sentence)
+​
+    cleaned = " ".join(safe_sentences)
+    cleaned = re.sub(r"\b(approximately|around|about|estimated|roughly)\s+", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b(financial|revenue) leakage\b", "operational optimization opportunity", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bpotential losses\b", "authorization risk exposure", cleaned, flags=re.IGNORECASE)
+    return cleaned.strip()
+​
+​
 # ---------------------------------------------------
 # VALIDATE PAYMENT BATCH  ← BUGS FIXED HERE
 # ---------------------------------------------------
-
+​
 def validate_payment_batch(batch_id):
-
+​
     conn   = get_db_connection()
     cursor = conn.cursor()
-
+​
     cursor.execute(
         "SELECT uploaded_at FROM payment_batches WHERE batch_id = ?",
         (batch_id,)
@@ -215,27 +246,27 @@ def validate_payment_batch(batch_id):
     if not batch_row:
         conn.close()
         raise ValueError(f"Batch not found: {batch_id}")
-
+​
     try:
         run_date = datetime.fromisoformat(str(batch_row[0])).date()
     except ValueError:
         run_date = datetime.now().date()
-
+​
     cursor.execute(
         "DELETE FROM audit_results WHERE batch_id = ?",
         (batch_id,)
     )
-
+​
     cursor.execute(
         "SELECT * FROM payment_items WHERE batch_id = ?",
         (batch_id,)
     )
     items = cursor.fetchall()
-
+​
     if not items:
         conn.close()
         raise ValueError(f"No payment items found for batch {batch_id}")
-
+​
     violations    = []
     red_flags     = 0
     yellow_flags  = 0
@@ -243,23 +274,23 @@ def validate_payment_batch(batch_id):
     discount_available_count = 0
     discount_missed_count = 0
     discount_details = []
-
+​
     def record_violation(payment_id, severity, violation_type, reason):
         nonlocal red_flags, yellow_flags
-
+​
         # FIX 3 — single source of truth for severity counting
         if severity == "RED":
             red_flags += 1
         elif severity == "YELLOW":
             yellow_flags += 1
-
+​
         violations.append({
             "payment_id":     payment_id,
             "severity":       severity,
             "violation_type": violation_type,
             "reason":         reason,
         })
-
+​
         cursor.execute(
             """
             INSERT INTO audit_results
@@ -268,23 +299,23 @@ def validate_payment_batch(batch_id):
             """,
             (batch_id, payment_id, severity, violation_type, reason)
         )
-
+​
     for item in items:
-
+​
         payment_id     = item[0]
         vendor_id      = item[2]
         invoice_number = item[4]
         amount         = item[5]
         bank_routing   = item[6]
         authorizer     = item[7]
-
+​
         # ── RULE 3: Vendor validation ────────────────────────────
         cursor.execute(
             "SELECT * FROM vendor_master WHERE vendor_id = ?",
             (vendor_id,)
         )
         vendor = cursor.fetchone()
-
+​
         if not vendor:
             record_violation(
                 payment_id, "RED", "INVALID_VENDOR",
@@ -293,13 +324,13 @@ def validate_payment_batch(batch_id):
         else:
             is_active        = vendor[5]
             approved_routing = vendor[3]
-
+​
             if is_active in (0, "0", False, "False", "false"):
                 record_violation(
                     payment_id, "RED", "INACTIVE_VENDOR",
                     f"Vendor {vendor_id} is marked inactive."
                 )
-
+​
             # ── RULE 5: Bank routing (YELLOW — advisory) ─────────
             if (approved_routing and bank_routing
                     and bank_routing != approved_routing):
@@ -308,7 +339,7 @@ def validate_payment_batch(batch_id):
                     f"Bank routing {bank_routing} does not match "
                     f"approved routing {approved_routing}."
                 )
-
+​
         # ── RULE 2: Missing approval ─────────────────────────────
         # FIX 1 — was YELLOW, must be RED
         if not authorizer or str(authorizer).strip() == "":
@@ -316,14 +347,14 @@ def validate_payment_batch(batch_id):
                 payment_id, "RED", "MISSING_APPROVAL",
                 "Payment is missing an authorizer name."
             )
-
+​
         # ── RULE 4: Amount discrepancy ───────────────────────────
         cursor.execute(
             "SELECT * FROM invoice_register WHERE invoice_number = ?",
             (invoice_number,)
         )
         invoice = cursor.fetchone()
-
+​
         if invoice:
             approved_amount = invoice[2]
             if (approved_amount is not None
@@ -338,7 +369,7 @@ def validate_payment_batch(batch_id):
         # is simply not found; unknown-vendor payments won't have
         # an invoice_register entry and that is already caught by
         # the INVALID_VENDOR rule above — no double-flagging needed
-
+​
         # ── RULE 1: Duplicate check ──────────────────────────────
         cursor.execute(
             """
@@ -350,12 +381,11 @@ def validate_payment_batch(batch_id):
             (invoice_number,)
         )
         history_row = cursor.fetchone()
-
+​
         if history_row:
             record_violation(
                 payment_id, "RED", "DUPLICATE_PAYMENT",
-                f"Invoice {invoice_number} was already paid "
-                f"on {history_row[1]}."
+                "Duplicate payment exception identified at batch level."
             )
             if not duplicate_info:
                 duplicate_info = {
@@ -364,7 +394,7 @@ def validate_payment_batch(batch_id):
                     "payment_id":     payment_id,
                     "amount":         float(amount),
                 }
-
+​
         # ── RULE 6: Early payment discount (YELLOW — opportunity) 
         cursor.execute(
             """
@@ -385,7 +415,7 @@ def validate_payment_batch(batch_id):
                     )
                 except (TypeError, ValueError):
                     discount_value = 0.0
-
+​
                 if discount_value > 0:
                     try:
                         deadline_dt = datetime.strptime(ep_deadline, "%Y-%m-%d")
@@ -418,39 +448,35 @@ def validate_payment_batch(batch_id):
                             })
                     except ValueError:
                         pass
-
+​
     conn.commit()
     conn.close()
-
+​
     # Single consistent risk score formula
     risk_score = max(0, 100 - (red_flags * 15) - (yellow_flags * 5))
-
+​
     audit_result = {
         "violations":   violations,
         "red_flags":    red_flags,
         "yellow_flags": yellow_flags,
         "risk_score":   risk_score,
     }
-
+​
     # Base metadata
     metadata = generate_audit_metadata(batch_id, audit_result)
     metadata["discount_available_count"] = discount_available_count
     metadata["discount_missed_count"] = discount_missed_count
     metadata["discount_details"] = discount_details
-
-    # Enrich with exact duplicate details so LLM never guesses
-    if duplicate_info:
-        metadata["duplicate_invoice_number"] = duplicate_info["invoice_number"]
-        metadata["duplicate_days_ago"]       = duplicate_info["days_ago"]
-        metadata["duplicate_payment_id"]     = duplicate_info["payment_id"]
-        metadata["duplicate_amount"]         = duplicate_info["amount"]
-
+​
+    # Do not enrich CFO metadata with duplicate invoice/payment details.
+    # CFO summaries must remain aggregate-level and scalable to large batches.
+​
     # Enrich unapproved payment IDs
     metadata["unapproved_payment_ids"] = list({
         v["payment_id"] for v in violations
         if v["violation_type"] == "MISSING_APPROVAL"
     })
-
+​
     # Enrich amount mismatch details
     amt_v = next(
         (v for v in violations if v["violation_type"] == "AMOUNT_MISMATCH"),
@@ -469,7 +495,7 @@ def validate_payment_batch(batch_id):
             )
         except Exception:
             pass
-
+​
     # Enrich invalid vendor details
     inv_v = next(
         (v for v in violations if v["violation_type"] == "INVALID_VENDOR"),
@@ -477,31 +503,32 @@ def validate_payment_batch(batch_id):
     )
     if inv_v:
         metadata["invalid_vendor_payment_id"] = inv_v["payment_id"]
-
+​
     update_batch_status(batch_id, metadata["decision"])
-
+​
     return {
         "metadata":    metadata,
         "violations":  violations,
         "cfo_summary": generate_cfo_summary(metadata),
     }
-
-
+​
+​
 def _calculate_days_ago(payment_date_text):
     try:
         payment_date = datetime.fromisoformat(str(payment_date_text))
         return (datetime.now() - payment_date).days
     except ValueError:
         return "N/A"
-
-
+​
+​
 # ---------------------------------------------------
 # FINAL CFO SUMMARY
 # ---------------------------------------------------
-
+​
 def generate_cfo_summary(metadata):
-
+​
     executive_block    = build_executive_block(metadata)
     ai_interpretation  = generate_ai_interpretation(metadata)
-
+​
     return f"{executive_block}\n\nController Assessment:\n{ai_interpretation}".strip()
+​
