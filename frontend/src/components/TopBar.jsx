@@ -1,5 +1,5 @@
 import { T } from "./constants.js";
-
+​
 export const TopBar = ({
   user,
   onBack,
@@ -10,8 +10,12 @@ export const TopBar = ({
   onViewHistory,
   onLogout,
 }) => {
-  const unreadCount = notifications.filter((n) => !n.is_read).length;
-
+  // Show only UNREAD notifications, newest first, capped at 5.
+  // Read ones stay available via View History.
+  const unread = notifications.filter((n) => !n.is_read);
+  const unreadCount = unread.length;
+  const visibleNotifications = unread.slice(0, 5);
+​
   return (
     <div
       style={{
@@ -47,7 +51,7 @@ export const TopBar = ({
             ← BACK
           </button>
         )}
-
+​
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {/* Animated status dot */}
           <div style={{ position: "relative" }}>
@@ -88,7 +92,7 @@ export const TopBar = ({
           </span>
         </div>
       </div>
-
+​
       {/* RIGHT */}
       <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
         {/* Bell — AP only */}
@@ -129,7 +133,7 @@ export const TopBar = ({
                 >
                   NOTIFICATIONS
                 </div>
-                {notifications.length === 0 ? (
+                {visibleNotifications.length === 0 ? (
                   <div
                     style={{
                       fontFamily: T.mono,
@@ -137,10 +141,10 @@ export const TopBar = ({
                       color: T.text2,
                     }}
                   >
-                    No rejected batches yet.
+                    No new notifications.
                   </div>
                 ) : (
-                  notifications.map((n) => (
+                  visibleNotifications.map((n) => (
                     <div
                       key={n.id}
                       style={{
@@ -156,9 +160,9 @@ export const TopBar = ({
                                 marginBottom: 4,
                             }}
                             >
-                            {n.file || n.file_name}
+                            {n.fileName || n.file_name || n.file || n.batchNo || n.batch_id}
                             </div>
-
+​
                             <div
                             style={{
                                 fontFamily: T.mono,
@@ -191,7 +195,7 @@ export const TopBar = ({
                 </div>
               </div>
             )}
-
+​
             {unreadCount > 0 && (
               <span
                 style={{
@@ -217,13 +221,13 @@ export const TopBar = ({
             )}
           </div>
         )}
-
+​
         <span
           style={{ fontFamily: T.mono, fontSize: 10, color: T.text2 }}
         >
           {user?.name?.toUpperCase()}
         </span>
-
+​
         {/* <button
           onClick={onSwitch}
           className="hov-btn"
@@ -239,7 +243,7 @@ export const TopBar = ({
         >
           SWITCH ROLE
         </button> */}
-
+​
         <button
           onClick={onLogout}
           className="hov-btn"
