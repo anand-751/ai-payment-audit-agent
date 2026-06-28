@@ -1,26 +1,16 @@
 """
 Idempotent database initializer.
 
-Runs on app startup so that a fresh database (for example, an empty Railway
-Volume) automatically gets every table, column, index, and the seed users.
-Safe to run on every boot.
+Runs on app startup so that a fresh database automatically gets every table,
+column, and index. Safe to run on every boot.
 
-IMPORTANT - volume mount location
----------------------------------
-Mount the Railway Volume at a dedicated path that contains NO source code
-(e.g. /data) and set DB_PATH=/data/payment_audit.db.
+Reference/master data can be copied from the committed seed DB on first boot.
 
-Do NOT mount the volume at app/db (/app/app/db): that folder holds this file
-and schema/seed code, and a volume mounted there HIDES them on first boot
-(empty reference tables, and possibly an import crash).
-
-First-boot behaviour:
-- If the live DB at settings.DB_PATH does not exist yet, the committed seed DB
-  (app/db/payment_audit.db, shipped inside the image) is copied to the volume
-  so reference data (vendor_master, invoice_register, payment_history) is
-  preserved.
-- Then schema/columns/users are ensured idempotently.
+User seeding is intentionally handled separately via a dedicated script,
+not during normal app startup.
 """
+
+
 import shutil
 from pathlib import Path
 
@@ -164,20 +154,7 @@ def init_db():
     _ensure_column(cur, "payment_batches", "cfo_comment", "TEXT")
     _ensure_column(cur, "payment_batches", "audit_json", "TEXT")
 
-    # Seed AP users (stored as PLAINTEXT to match the current auth_service check)
-    seed_users = [
-        ("chirag.singh", "AP@Secure2025", "ap", "Chirag Singh"),
-        ("robin.preet",  "AP@Secure2025", "ap", "Robin Preet"),
-    ]
-    cur.executemany(
-        """INSERT INTO users (username, password_hash, role, full_name)
-           VALUES (?, ?, ?, ?)
-           ON CONFLICT(username) DO UPDATE SET
-               password_hash = excluded.password_hash,
-               role          = excluded.role,
-               full_name     = excluded.full_name""",
-        seed_users,
-    )
+    
 
     conn.commit()
     conn.close()
