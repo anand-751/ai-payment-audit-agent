@@ -196,7 +196,7 @@ export const TopBar = ({
               </div>
             )}
 ​
-            {unreadCount > 0 && (
+            {unreadCount > 0 && !showNotifications && (
               <span
                 style={{
                   position: "absolute",

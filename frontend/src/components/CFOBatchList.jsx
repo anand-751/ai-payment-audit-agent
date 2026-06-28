@@ -239,8 +239,7 @@ export const CFOBatchList = ({ batches, onSelect }) => {
                         color: T.text2,
                       }}
                     >
-                        {new Date(b.uploadedAt).toLocaleString("en-IN")}
-                        {/* {new Date(new Date(b.uploadedAt).getTime() + 5.5 * 60 * 60 * 1000).toLocaleString("en-IN")} */}
+                        {b.uploadedAt ? new Date(b.uploadedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : ""}
                     </div>
                   </div>
 

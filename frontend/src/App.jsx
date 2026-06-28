@@ -211,16 +211,23 @@ export default function App() {
   };
 
   const handleOpenNotifications = () => {
-    setShowNotifications((prev) => !prev);
-    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-    // Persist read-state to the backend so the badge stays cleared after refresh
-    notifications
-      .filter((n) => !n.is_read)
-      .forEach((n) => {
-        fetch(`${API_BASE}/notifications/${n.id}/read`, { method: "POST" }).catch(
-          () => {}
-        );
-      });
+    setShowNotifications((prev) => {
+      const next = !prev;
+      if (!next) {
+        // Closing: mark notifications as read in memory
+        setNotifications((prevNotifs) => {
+          const unreadIds = prevNotifs.filter((n) => !n.is_read).map((n) => n.id);
+          // Persist read-state to the backend
+          unreadIds.forEach((id) => {
+            fetch(`${API_BASE}/notifications/${id}/read`, { method: "POST" }).catch(
+              () => {}
+            );
+          });
+          return prevNotifs.map((n) => ({ ...n, is_read: true }));
+        });
+      }
+      return next;
+    });
   };
 
   if (!user) {

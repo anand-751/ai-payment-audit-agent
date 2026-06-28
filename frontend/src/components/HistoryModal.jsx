@@ -198,10 +198,7 @@ export const HistoryModal = ({ rows, onClose }) => (
                         fontSize: 10,
                     }}
                     >
-                    {new Date(
-                        new Date(row.decided_at).getTime() +
-                        5.5 * 60 * 60 * 1000
-                    ).toLocaleString("en-IN")}
+                    {row.decided_at ? new Date(row.decided_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : ""}
                     </div>
                 </div>
                 </div>

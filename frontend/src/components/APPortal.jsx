@@ -209,7 +209,7 @@ export const APPortal = ({ batches, onUpload }) => {
                     <div
                       style={{ fontFamily: T.mono, fontSize: 9, color: T.text2 }}
                     >
-                      {b.uploadedAt}
+                      {b.uploadedAt ? new Date(b.uploadedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : ""}
                     </div>
                   </div>
                   <span

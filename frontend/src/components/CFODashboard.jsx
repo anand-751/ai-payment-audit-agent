@@ -1,6 +1,48 @@
 import { useState } from "react";
 import { T, fmt, fmtFull } from "./constants.js";
 
+const formatISTDateTime = (date) => {
+  try {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+    const parts = formatter.formatToParts(date);
+    const p = {};
+    parts.forEach((part) => {
+      p[part.type] = part.value;
+    });
+    return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}:${p.second}`;
+  } catch (e) {
+    return date.toISOString().slice(0, 19).replace("T", " ");
+  }
+};
+
+const formatISTDateOnly = (date) => {
+  try {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    const parts = formatter.formatToParts(date);
+    const p = {};
+    parts.forEach((part) => {
+      p[part.type] = part.value;
+    });
+    return `${p.year}-${p.month}-${p.day}`;
+  } catch (e) {
+    return date.toISOString().slice(0, 10);
+  }
+};
+
 export const CFODashboard = ({ batch, apiBase, user, onBack, onDecision }) => {
   const { metadata, violations, cfo_summary } = batch;
   const [filter, setFilter] = useState("ALL");
@@ -121,7 +163,7 @@ export const CFODashboard = ({ batch, apiBase, user, onBack, onDecision }) => {
             style={{ fontFamily: T.mono, fontSize: 9, color: T.text2 }}
           >
             CFO: {user?.name?.toUpperCase()} ·{" "}
-            {new Date().toISOString().slice(0, 19).replace("T", " ")} UTC
+            {formatISTDateTime(new Date())} IST
           </div>
         </div>
       </div>
@@ -179,7 +221,7 @@ export const CFODashboard = ({ batch, apiBase, user, onBack, onDecision }) => {
               marginBottom: 6,
             }}
           >
-            {metadata.batch_id} · Uploaded {batch.uploadedAt} by{" "}
+            {metadata.batch_id} · Uploaded {batch.uploadedAt ? new Date(batch.uploadedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : ""} by{" "}
             {batch.uploadedBy}
           </div>
           <div
@@ -725,7 +767,7 @@ export const CFODashboard = ({ batch, apiBase, user, onBack, onDecision }) => {
             }}
           >
             DIGITAL SIGN-OFF · CFO: {user?.name?.toUpperCase()} ·{" "}
-            {new Date().toISOString().slice(0, 10)}
+            {formatISTDateOnly(new Date())}
           </div>
 
           <div
