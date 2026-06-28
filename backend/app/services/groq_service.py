@@ -111,67 +111,84 @@ def build_llm_prompt(metadata):
     else:
         cfo_review_posture = "High Risk — Escalated Mitigation Review"
 ​
-    return f"""
-You are a Senior Treasury Controller preparing an executive payment risk assessment for the Chief Financial Officer (CFO).
-​
-The payment validation is already completed by a deterministic control engine. Your only job is to write a concise CFO-ready batch-level treasury risk summary from the validated aggregate metrics.
-​
+    return f"""You are preparing a CFO-ready treasury risk advisory paragraph from validated aggregate payment-control metrics.
+
+The dashboard already displays the raw numbers. Your job is not to repeat the dashboard. Your job is to interpret the metrics and advise the CFO on the overall control posture, mitigation focus, and risk-acceptance considerations.
+
 ==========================================================
 NON-NEGOTIABLE RULES
 ==========================================================
-- NEVER invent, estimate, infer, calculate or modify any numerical value.
-- NEVER change the recommended action.
-- NEVER change the risk classification.
-- NEVER mention invoice numbers, payment IDs, vendor IDs, vendor names, bank/routing details, or any individual transaction.
-- NEVER use specific-instance wording such as "a specific instance", "one notable invoice", or "the affected vendor".
-- Use ONLY aggregate batch-level counts and control categories.
-- Produce plain text only: one paragraph, no markdown, no bullets, maximum 6 sentences.
-​
+- Do not authorize payment release.
+- Do not approve, reject, release, or hold payments as a final decision.
+- Do not present your output as the final payment decision.
+- Final authorization and risk acceptance remain with the CFO or designated finance approver.
+- Do not invent, recalculate, round, approximate, infer, or alter figures.
+- Never use the words: approximately, around, about, estimated, roughly.
+- Never mention invoice numbers, payment IDs, vendor IDs, vendor names, bank details, routing details, or any specific transaction.
+- Never use specific-instance wording such as "a specific invoice", "one vendor", "this payment", or "a particular transaction".
+- Use only batch-level counts and control categories.
+- Do not list every metric mechanically.
+- Do not simply restate the dashboard.
+- Mention only the most decision-relevant metrics needed to support the CFO advisory judgment.
+- Frame the Batch Integrity Score only as the value cleared for disbursement based on validated controls.
+- Frame the remaining percentage as Financial Risk exposure.
+- Never call the Batch Integrity Score a risk score.
+- Discount items are operational optimization opportunities only, separate from authorization risk.
+- Never describe discounts as financial leakage, revenue leakage, losses, blockers, or control failures.
+- Plain text only.
+- One paragraph only.
+- No markdown.
+- No bullet points.
+- Maximum 6 sentences.
+
 ==========================================================
 VALIDATED EXECUTIVE METRICS
 ==========================================================
-Batch Integrity Score: {integrity_score:.1f} out of 100
-Financial Risk: {financial_risk:.1f}%
+CFO Review Posture: {review_posture}
 Risk Classification: {risk_band}
-CFO Review Posture: {cfo_review_posture}
-Recommended Action: {recommended_action}
+Batch Integrity Score: {integrity_score:.1f}%
+Financial Risk: {financial_risk:.1f}%
 Total Batch Value: ${metadata['total_batch_amount']:,.2f}
 High Risk Exposure: ${metadata['high_risk_exposure']:,.2f}
-Blocked Payments Count: {metadata['total_blocked_payments']}
-​
-Duplicate Payment Exceptions: {metadata['duplicate_count']}
+Blocked Payments: {metadata['total_blocked_payments']}
+
+==========================================================
+CONTROL EXCEPTION COUNTS
+==========================================================
 Approval Control Failures: {metadata['approval_failures']}
 Vendor Validation Issues: {metadata['vendor_issues']}
 Amount Validation Issues: {metadata['amount_mismatches']}
 Bank Routing Exceptions: {metadata['routing_issues']}
-Discounts Available Count: {metadata.get('discount_available_count', 0)}
-Discounts Missed Count: {metadata.get('discount_missed_count', 0)}
-​
+
 ==========================================================
-YOUR TASK
+OPERATIONAL OPTIMIZATION COUNTS
 ==========================================================
-Write a short, crisp, CFO-ready treasury risk summary. Use direct executive language. Do not over-explain.
-​
-FOLLOW THESE RULES EXACTLY:
-​
-REQUIRED FRAMING:
-- Open with the CFO Review Posture: "{cfo_review_posture}".
-- Frame the Batch Integrity Score as safe-for-disbursement value: {integrity_score:.1f}% cleared, {financial_risk:.1f}% at risk exposure.
-- Include Total Batch Value and High Risk Exposure.
-- Include every non-zero control category using aggregate counts only.
-- Use exact validated figures only. Never use "approximately", "around", "about", "estimated", or rounded figures.
-- Discount items are operational optimization opportunities only, separate from authorization risk.
-- Never use "financial leakage", "revenue leakage", "potential losses", "control failure", or "blocker" for discounts.
-- Close with this control strategy: "Mitigation should focus on approval enforcement, duplicate-payment prevention, and amount-validation controls before CFO risk acceptance is considered."
-​
-NARRATIVE STRUCTURE (in this order):
-1. CFO posture and recommended action.
-2. Integrity score as cleared value and financial risk exposure.
-3. Batch value, high-risk exposure, and aggregate exceptions.
-4. Discount observations as operational optimization only, using counts only.
-5. Category-level mitigation recommendation aligned to: "{band_guidance}"
-"""
-​
+Discount Opportunities Available: {metadata.get('discount_available_count', 0)}
+Discount Opportunities Missed: {metadata.get('discount_missed_count', 0)}
+
+==========================================================
+ADVISORY OBJECTIVE
+==========================================================
+Write one crisp CFO-ready treasury risk paragraph that gives professional judgment, not a metric summary.
+
+The paragraph must:
+1. Open with the CFO review posture.
+2. Briefly interpret the Batch Integrity Score as the portion of value cleared for disbursement and the Financial Risk as the remaining exposure.
+3. Explain what the exception pattern means for the CFO’s control review.
+4. Prioritize mitigation focus by control category, using aggregate counts only where helpful.
+5. Separate discount opportunities from authorization risk and frame them only as treasury optimization items.
+6. Avoid transaction-level detail completely.
+7. Close with this exact sentence: Mitigation should focus on approval enforcement, duplicate-payment prevention, and amount-validation controls before CFO risk acceptance is considered.
+
+==========================================================
+STYLE REQUIREMENTS
+==========================================================
+- Sound like a senior treasury controller advising a CFO.
+- Be interpretive, not descriptive.
+- Be concise and decisive, but do not make the final authorization decision.
+- Do not over-repeat dashboard numbers.
+- Do not mention any individual invoice, payment, vendor, or transaction.
+- Every figure used must exactly match the validated metrics above."""
 # ---------------------------------------------------
 # GENERATE AI INTERPRETATION
 # ---------------------------------------------------
@@ -184,7 +201,7 @@ def generate_ai_interpretation(metadata):
             {
                 "role": "system",
                 "content": (
-                    "Write one crisp CFO-ready treasury risk paragraph from validated aggregate metrics only. "
+                    "Write one crisp CFO-ready treasury risk paragraph from validated aggregate metrics and overall professional judgement to assist cfo with treasury risk mitigation. "
                     "Do not invent, recalculate, round, approximate, or alter figures. Never use approximately, around, about, estimated, or roughly. "
                     "Never mention invoice numbers, payment IDs, vendor IDs, vendor names, bank details, routing details, or any specific transaction. "
                     "Never use specific-instance wording. Use only batch-level counts and control categories. "
@@ -196,7 +213,7 @@ def generate_ai_interpretation(metadata):
             },
             {"role": "user", "content": prompt},
         ],
-        temperature=0.1,
+        temperature=0.2,
         max_tokens=450,
     )
     return sanitize_cfo_narrative(response.choices[0].message.content.strip())
