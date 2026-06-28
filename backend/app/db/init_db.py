@@ -149,12 +149,14 @@ def init_db():
         """
     )
 
-    # Make sure columns added after the original schema exist on older DBs
+    # Make sure columns added after the original schema exist on older/new DBs
     _ensure_column(cur, "payment_batches", "file_path", "TEXT")
     _ensure_column(cur, "payment_batches", "cfo_comment", "TEXT")
     _ensure_column(cur, "payment_batches", "audit_json", "TEXT")
-
-    
+    _ensure_column(cur, "payment_batches", "file_name", "TEXT")
+    _ensure_column(cur, "payment_batches", "uploaded_by", "TEXT")
+    _ensure_column(cur, "payment_batches", "uploaded_by_name", "TEXT")
+    _ensure_column(cur, "notifications", "recipient_user", "TEXT")
 
     conn.commit()
     conn.close()
