@@ -65,128 +65,107 @@ Discounts missed: {metadata.get('discount_missed_count', 0)}
 
 
 # ---------------------------------------------------
+# DERIVE SCORE FIELDS  (single source of truth)
+# ---------------------------------------------------
+
+def _derive_score_fields(metadata):
+    """Compute all score-derived fields from raw metadata.
+
+    Returns a tuple:
+        (integrity_score, financial_risk, risk_band, recommended_action, band_guidance)
+    """
+    risk_score      = float(metadata["risk_score"])          # 0–100, higher = more risky
+    integrity_score = max(0.0, 100.0 - risk_score)           # higher = safer
+    financial_risk  = risk_score                             # financial risk % = risk_score
+
+    if integrity_score >= 85:
+        risk_band          = "LOW RISK"
+        recommended_action = metadata.get("decision", "RELEASE")
+        band_guidance      = (
+            "The batch integrity is high. It is safe to release the payment batch. "
+            "The CFO may choose to accept any residual exceptions directly via "
+            "management comments and proceed with authorization."
+        )
+    elif integrity_score >= 70:
+        risk_band          = "MEDIUM RISK"
+        recommended_action = metadata.get("decision", "PARTIAL RELEASE")
+        band_guidance      = (
+            "Medium risk detected. Review the flagged control exceptions before "
+            "authorizing release. Consider selective blocking of high-risk line items."
+        )
+    else:
+        risk_band          = "HIGH RISK"
+        recommended_action = metadata.get("decision", "HOLD")
+        band_guidance      = (
+            "High risk detected. The batch must be held. Strict risk mitigations and "
+            "remediation of all flagged exceptions are required before any release can "
+            "be authorized."
+        )
+
+    return integrity_score, financial_risk, risk_band, recommended_action, band_guidance
+
+
+# ---------------------------------------------------
 # BUILD CONTROLLED LLM PROMPT
 # ---------------------------------------------------
 
 def build_llm_prompt(metadata):
 
-    integrity_score = 100 - metadata["risk_score"]
+    (
+        integrity_score,
+        financial_risk,
+        risk_band,
+        recommended_action,
+        band_guidance,
+    ) = _derive_score_fields(metadata)
 
     return f"""
-You are a Senior Treasury Controller preparing an executive payment authorization summary for the Chief Financial Officer (CFO).
+You are a Senior Treasury Controller preparing an executive payment risk assessment for the Chief Financial Officer (CFO).
 
-The audit results below are produced by a deterministic payment validation engine. Every number has already been verified.
+The payment validation has already been completed by a deterministic financial control engine. Your responsibility is ONLY to convert the validated financial metrics into a strategic executive treasury risk narrative in professional financial terms to assist the CFO in making a payment authorization decision.
 
-CRITICAL INSTRUCTIONS
+==========================================================
+NON-NEGOTIABLE RULES
+==========================================================
+- NEVER invent, estimate, infer, calculate or modify any numerical value.
+- NEVER change the recommended action.
+- NEVER change the risk classification.
+- NEVER narrate individual invoice numbers, payment IDs, vendor IDs or specific transaction details one by one.
+- Speak ONLY at the payment batch level.
+- Group findings by control category using aggregate counts only (e.g., "3 duplicate payment exceptions").
+- Produce plain text only (one paragraph, no markdown, no bullet points, max 8 sentences).
 
-- NEVER invent, estimate, infer or modify any figures.
-- Use ONLY the values provided below.
-- NEVER refer to the Batch Integrity Score as a Risk Score.
-- A higher Batch Integrity Score means MORE of the batch value is safe for payment.
-- Financial Risk is the remaining percentage of the batch value currently exposed to blocked payments.
-- NEVER state that a higher Integrity Score indicates higher risk.
-- Keep the summary executive, concise and natural.
-- No markdown.
-- No bullet points.
-- One paragraph only.
-- 6–8 sentences maximum.
-
-VALIDATED METRICS
-
-Batch Integrity Score: {integrity_score:.1f}%
-
+==========================================================
+VALIDATED EXECUTIVE METRICS
+==========================================================
+Batch Integrity Score: {integrity_score:.1f} out of 100
 Financial Risk: {financial_risk:.1f}%
+Risk Classification: {risk_band}
+Recommended Action: {recommended_action}
+Total Batch Value: ${metadata['total_batch_amount']:,.2f}
+High Risk Exposure: ${metadata['high_risk_exposure']:,.2f}
+Blocked Payments Count: {metadata['total_blocked_payments']}
 
-Total Batch Value:
-${metadata['total_batch_amount']:,.2f}
+Duplicate Payment Exceptions: {metadata['duplicate_count']}
+Approval Control Failures: {metadata['approval_failures']}
+Vendor Validation Issues: {metadata['vendor_issues']}
+Amount Validation Issues: {metadata['amount_mismatches']}
+Bank Routing Exceptions: {metadata['routing_issues']}
 
-High Risk Exposure:
-${metadata['high_risk_exposure']:,.2f}
-
-Decision:
-{metadata['decision']}
-
-Integrity Classification:
-{metadata['integrity_label']}
-
-Blocked Payments:
-{metadata['total_blocked_payments']}
-
-Duplicate Payments:
-{metadata['duplicate_count']}
-
-Duplicate Invoice:
-{metadata.get('duplicate_invoice_number', 'N/A')}
-
-Duplicate Payment ID:
-{metadata.get('duplicate_payment_id', 'N/A')}
-
-Duplicate Amount:
-${metadata.get('duplicate_amount', 0):,.2f}
-
-Previously Paid:
-{metadata.get('duplicate_days_ago', 'N/A')} days ago
-
-Approval Failures:
-{metadata['approval_failures']}
-
-Unapproved Payment IDs:
-{', '.join(metadata.get('unapproved_payment_ids', []))}
-
-Vendor Issues:
-{metadata['vendor_issues']}
-
-Routing Issues:
-{metadata['routing_issues']}
-
-Amount Mismatches:
-{metadata['amount_mismatches']}
-
-Amount Mismatch Payment:
-{metadata.get('amount_mismatch_payment_id', 'N/A')}
-
-Submitted Amount:
-${metadata.get('amount_mismatch_uploaded', 0):,.2f}
-
-Approved Amount:
-${metadata.get('amount_mismatch_approved', 0):,.2f}
-
-Discount Opportunities:
-{metadata['discount_opportunities']}
-
-Discounts Available:
-{metadata.get('discount_available_count', 0)}
-
-Discounts Missed:
-{metadata.get('discount_missed_count', 0)}
-
+==========================================================
 YOUR TASK
+==========================================================
+Write an executive treasury assessment narrative for the CFO using natural language processing in professional financial/treasury terms.
 
-Write an executive treasury assessment suitable for a CFO making a payment authorization decision.
-
-The summary must:
-
-1. Begin with the payment recommendation (RELEASE, HOLD or PARTIAL RELEASE).
-
-2. State the Batch Integrity Score ({integrity_score:.1f}%) and explain that it represents the percentage of the total payment value considered safe for disbursement.
-
-3. State the Financial Risk ({financial_risk:.1f}%) and explain that it represents the percentage of the batch value currently exposed to blocked payments.
-
-4. Mention the total batch value and the high-risk exposure amount.
-
-5. Summarize the key control failures including duplicate payments, vendor issues, routing issues, approval failures and amount mismatches only if they exist.
-
-6. Mention available or missed discount opportunities only as operational observations, never as reasons to block payment.
-
-7. Finish with a single, definitive treasury recommendation explaining whether the batch should be released, partially released or held.
-
-Remember:
-
-- Never call the Batch Integrity Score a Risk Score.
-- Never say "low risk with an integrity score of XX%".
-- The Integrity Score measures SAFE payment value.
-- Financial Risk measures AT-RISK payment value.
-- Every numerical value must exactly match the validated metrics above.
+The narrative must:
+1. State the Recommended Action ({recommended_action}) and Risk Classification ({risk_band}) based on the Batch Integrity Score ({integrity_score:.1f} out of 100).
+2. Frame the risk management strategy based on the integrity score threshold:
+   - If the score is 85 or above: Explain that the risk is low, and it is safe to release the batch. State that the CFO may choose to handle residual exception mitigations directly via management comments and approve/pass the release.
+   - If the score is below 85 (but >= 70): Explain that this represents medium risk.
+   - If the score is below 70: Explain that this represents high risk and requires strict risk mitigations and remediation before any release.
+3. Narrate the control environment by highlighting the number of payments that have exceptions and their specific failure categories (e.g. duplicate payments or missing approvals) using only the provided aggregate counts.
+4. Reference the Total Batch Value and High Risk Exposure to give financial scale.
+5. Provide a strategic treasury recommendation that aligns exactly with the Guidance: "{band_guidance}"
 """
 
 # ---------------------------------------------------
@@ -194,30 +173,33 @@ Remember:
 # ---------------------------------------------------
 
 def generate_ai_interpretation(metadata):
-
     prompt = build_llm_prompt(metadata)
-
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[
             {
                 "role": "system",
                 "content": (
-                    "You are a senior treasury controller "
-                    "and payment risk officer. You write "
-                    "precise, unambiguous executive summaries. "
-                    "You never invent figures."
-                )
+                    "You are a senior treasury controller and payment risk officer. "
+                    "You write precise, hallucination-free, one-paragraph executive risk "
+                    "assessments for a CFO in professional financial/treasury language. "
+                    "You narrate overall batch-level risk strategy — never individual payments. "
+                    "You state the risk classification (LOW / MEDIUM / HIGH) based on the "
+                    "Batch Integrity Score out of 100: score >= 85 is LOW RISK and safe to "
+                    "release; score < 85 and >= 70 is MEDIUM RISK; score < 70 is HIGH RISK. "
+                    "For LOW RISK batches you explicitly note that the CFO may accept residual "
+                    "exceptions via management comments and proceed with release. "
+                    "You group control failures by category using only the supplied aggregate "
+                    "counts. You never invent, estimate or alter any figure. "
+                    "You never enumerate individual invoices, payment IDs, vendor IDs or "
+                    "transaction details. You never call the Integrity Score a risk score."
+                ),
             },
-            {
-                "role": "user",
-                "content": prompt
-            }
+            {"role": "user", "content": prompt},
         ],
         temperature=0.1,
-        max_tokens=180
+        max_tokens=400,
     )
-
     return response.choices[0].message.content.strip()
 
 
@@ -445,8 +427,8 @@ def validate_payment_batch(batch_id):
     conn.commit()
     conn.close()
 
-    # FIX 3 — single consistent risk score formula
-    # risk_score = max(0, 100 - (red_flags * 15) - (yellow_flags * 5))
+    # Single consistent risk score formula
+    risk_score = max(0, 100 - (red_flags * 15) - (yellow_flags * 5))
 
     audit_result = {
         "violations":   violations,
