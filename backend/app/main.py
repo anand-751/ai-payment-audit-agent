@@ -23,7 +23,7 @@ app.add_middleware(
 )
 
 @app.on_event("startup")
-def startup():
+def _on_startup():
     init_db()
     print("INIT_DB COMPLETE")
 
