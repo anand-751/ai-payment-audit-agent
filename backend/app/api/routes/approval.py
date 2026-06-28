@@ -36,6 +36,14 @@ async def submit_decision(batch_id: str, request: DecisionRequest, db=Depends(ge
         
         # Create notification for AP Manager (rejections only)
         if decision == "REJECTED":
+            # Look up who uploaded this batch so only that user is notified
+            cursor.execute(
+                "SELECT uploaded_by FROM payment_batches WHERE batch_id = ?",
+                (batch_id,)
+            )
+            owner_row = cursor.fetchone()
+            target_user = owner_row[0] if owner_row else None
+
             notification_type = "REJECTED"
             title = "Batch Rejected"
             message = f"Batch {batch_id} was rejected by CFO."
@@ -44,9 +52,9 @@ async def submit_decision(batch_id: str, request: DecisionRequest, db=Depends(ge
             
             cursor.execute(
                 """INSERT INTO notifications 
-                   (batch_id, recipient_role, notification_type, title, message, decision)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (batch_id, "AP_MANAGER", notification_type, title, message, decision)
+                   (batch_id, recipient_role, recipient_user, notification_type, title, message, decision)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (batch_id, "AP_MANAGER", target_user, notification_type, title, message, decision)
             )
         
         db.commit()
@@ -64,7 +72,7 @@ async def submit_decision(batch_id: str, request: DecisionRequest, db=Depends(ge
 
 
 @router.get("/history")
-async def get_notification_history(role: str = "AP_MANAGER", limit: int = 7, db=Depends(get_db)):
+async def get_notification_history(role: str = "AP_MANAGER", user: str = None, limit: int = 7, db=Depends(get_db)):
     """
     Fetch historical notifications for a role
     Called only on demand when user clicks History button
@@ -77,9 +85,10 @@ async def get_notification_history(role: str = "AP_MANAGER", limit: int = 7, db=
                 message, decision, is_read, created_at
                FROM notifications 
                WHERE recipient_role = ?
+                 AND (recipient_user = ? OR recipient_user IS NULL)
                ORDER BY created_at DESC
                LIMIT ?""",
-            (role, limit)
+            (role, user, limit)
         )
         
         rows = cursor.fetchall()
