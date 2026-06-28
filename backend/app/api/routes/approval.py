@@ -112,6 +112,49 @@ async def get_notification_history(role: str = "AP_MANAGER", user: str = None, l
         return {"notifications": []}
 
 
+@router.get("/notifications")
+async def get_active_notifications(role: str = "AP_MANAGER", user: str = None, db=Depends(get_db)):
+    """
+    Live notification feed.
+    Shows ONLY unread (latest) notifications. Once a notification is marked
+    read, it drops out of this feed. Previously read items remain available
+    via the /history endpoint (view history).
+    """
+    try:
+        cursor = db.cursor()
+        cursor.execute(
+            """SELECT 
+                notification_id, batch_id, notification_type, title, 
+                message, decision, is_read, created_at
+               FROM notifications 
+               WHERE recipient_role = ?
+                 AND (recipient_user = ? OR recipient_user IS NULL)
+                 AND is_read = 0
+               ORDER BY created_at DESC""",
+            (role, user)
+        )
+        
+        rows = cursor.fetchall()
+        notifications = []
+        for row in rows:
+            notifications.append({
+                "id": row[0],
+                "batchNo": row[1],
+                "type": row[2],
+                "title": row[3],
+                "message": row[4],
+                "decision": row[5],
+                "is_read": row[6],
+                "createdAt": row[7]
+            })
+        
+        return {"notifications": notifications}
+    except Exception as e:
+        logger.error(f"Active notifications fetch error: {str(e)}")
+        # Return empty list if table doesn't exist yet
+        return {"notifications": []}
+
+
 @router.put("/notifications/{notification_id}/read")
 async def mark_notification_read(notification_id: int, db=Depends(get_db)):
     """
