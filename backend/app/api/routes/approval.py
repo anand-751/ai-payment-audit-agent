@@ -3,16 +3,16 @@ from pydantic import BaseModel
 from app.core.database import get_db
 from datetime import datetime
 import logging
-
+​
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/approval")
-
-
+​
+​
 class DecisionRequest(BaseModel):
     decision: str
     comment: str = ""
-
-
+​
+​
 @router.post("/batch/{batch_id}/decision")
 async def submit_decision(batch_id: str, request: DecisionRequest, db=Depends(get_db)):
     """
@@ -43,7 +43,7 @@ async def submit_decision(batch_id: str, request: DecisionRequest, db=Depends(ge
             )
             owner_row = cursor.fetchone()
             target_user = owner_row[0] if owner_row else None
-
+​
             notification_type = "REJECTED"
             title = "Batch Rejected"
             message = f"Batch {batch_id} was rejected by CFO."
@@ -69,8 +69,8 @@ async def submit_decision(batch_id: str, request: DecisionRequest, db=Depends(ge
         db.rollback()
         logger.error(f"Decision submission error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
+​
+​
 @router.get("/history")
 async def get_notification_history(role: str = "AP_MANAGER", user: str = None, limit: int = 7, db=Depends(get_db)):
     """
@@ -81,12 +81,14 @@ async def get_notification_history(role: str = "AP_MANAGER", user: str = None, l
         cursor = db.cursor()
         cursor.execute(
             """SELECT 
-                notification_id, batch_id, notification_type, title, 
-                message, decision, is_read, created_at
-               FROM notifications 
-               WHERE recipient_role = ?
-                 AND (recipient_user = ? OR recipient_user IS NULL)
-               ORDER BY created_at DESC
+                n.notification_id, n.batch_id, n.notification_type, n.title, 
+                n.message, n.decision, n.is_read, n.created_at,
+                COALESCE(b.file_name, n.batch_id) AS file_name
+               FROM notifications n
+               LEFT JOIN payment_batches b ON n.batch_id = b.batch_id
+               WHERE n.recipient_role = ?
+                 AND (n.recipient_user = ? OR n.recipient_user IS NULL)
+               ORDER BY n.created_at DESC
                LIMIT ?""",
             (role, user, limit)
         )
@@ -102,7 +104,8 @@ async def get_notification_history(role: str = "AP_MANAGER", user: str = None, l
                 "message": row[4],
                 "decision": row[5],
                 "is_read": row[6],
-                "createdAt": row[7]
+                "createdAt": row[7],
+                "fileName": row[8]
             })
         
         return {"notifications": notifications}
@@ -110,8 +113,8 @@ async def get_notification_history(role: str = "AP_MANAGER", user: str = None, l
         logger.error(f"History fetch error: {str(e)}")
         # Return empty list if table doesn't exist yet
         return {"notifications": []}
-
-
+​
+​
 @router.get("/notifications")
 async def get_active_notifications(role: str = "AP_MANAGER", user: str = None, db=Depends(get_db)):
     """
@@ -124,13 +127,16 @@ async def get_active_notifications(role: str = "AP_MANAGER", user: str = None, d
         cursor = db.cursor()
         cursor.execute(
             """SELECT 
-                notification_id, batch_id, notification_type, title, 
-                message, decision, is_read, created_at
-               FROM notifications 
-               WHERE recipient_role = ?
-                 AND (recipient_user = ? OR recipient_user IS NULL)
-                 AND is_read = 0
-               ORDER BY created_at DESC""",
+                n.notification_id, n.batch_id, n.notification_type, n.title, 
+                n.message, n.decision, n.is_read, n.created_at,
+                COALESCE(b.file_name, n.batch_id) AS file_name
+               FROM notifications n
+               LEFT JOIN payment_batches b ON n.batch_id = b.batch_id
+               WHERE n.recipient_role = ?
+                 AND (n.recipient_user = ? OR n.recipient_user IS NULL)
+                 AND n.is_read = 0
+               ORDER BY n.created_at DESC
+               LIMIT 5""",
             (role, user)
         )
         
@@ -145,7 +151,8 @@ async def get_active_notifications(role: str = "AP_MANAGER", user: str = None, d
                 "message": row[4],
                 "decision": row[5],
                 "is_read": row[6],
-                "createdAt": row[7]
+                "createdAt": row[7],
+                "fileName": row[8]
             })
         
         return {"notifications": notifications}
@@ -153,8 +160,8 @@ async def get_active_notifications(role: str = "AP_MANAGER", user: str = None, d
         logger.error(f"Active notifications fetch error: {str(e)}")
         # Return empty list if table doesn't exist yet
         return {"notifications": []}
-
-
+​
+​
 @router.put("/notifications/{notification_id}/read")
 async def mark_notification_read(notification_id: int, db=Depends(get_db)):
     """
@@ -173,3 +180,4 @@ async def mark_notification_read(notification_id: int, db=Depends(get_db)):
         db.rollback()
         logger.error(f"Mark read error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+​   
