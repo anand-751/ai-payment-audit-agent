@@ -159,18 +159,20 @@ def get_notifications(role: str, user: str = None):
         cur.execute(
             """
             SELECT
-                notification_id,
-                batch_id,
-                notification_type,
-                title,
-                message,
-                decision,
-                is_read,
-                created_at
-            FROM notifications
-            WHERE recipient_role = 'ap'
-              AND (recipient_user = ? OR recipient_user IS NULL)
-            ORDER BY created_at DESC
+                n.notification_id,
+                n.batch_id,
+                n.notification_type,
+                n.title,
+                n.message,
+                n.decision,
+                n.is_read,
+                n.created_at,
+                b.file_name
+            FROM notifications n
+            LEFT JOIN payment_batches b ON n.batch_id = b.batch_id
+            WHERE n.recipient_role = 'ap'
+              AND (n.recipient_user = ? OR n.recipient_user IS NULL)
+            ORDER BY n.created_at DESC
             LIMIT 20
             """,
             (user,),
@@ -179,17 +181,19 @@ def get_notifications(role: str, user: str = None):
         cur.execute(
             """
             SELECT
-                notification_id,
-                batch_id,
-                notification_type,
-                title,
-                message,
-                decision,
-                is_read,
-                created_at
-            FROM notifications
-            WHERE recipient_role = ?
-            ORDER BY created_at DESC
+                n.notification_id,
+                n.batch_id,
+                n.notification_type,
+                n.title,
+                n.message,
+                n.decision,
+                n.is_read,
+                n.created_at,
+                b.file_name
+            FROM notifications n
+            LEFT JOIN payment_batches b ON n.batch_id = b.batch_id
+            WHERE n.recipient_role = ?
+            ORDER BY n.created_at DESC
             LIMIT 20
             """,
             (role,),

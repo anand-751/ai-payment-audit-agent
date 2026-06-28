@@ -62,7 +62,8 @@ export default function App() {
         (data.data || []).map((n) => ({
           id: n.notification_id,
           batchNo: n.batch_id,
-          file: n.batch_id,
+          file: n.file_name || n.batch_id,
+          fileName: n.file_name,
           decision: n.decision,
           message: n.message || n.title,
           is_read: !!n.is_read,
