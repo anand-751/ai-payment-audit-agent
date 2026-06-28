@@ -34,30 +34,14 @@ Batch Integrity Score: {metadata['risk_score']:.1f}%
 Total Batch Value: ${metadata['total_batch_amount']:,.2f}
 High Risk Exposure: ${metadata['high_risk_exposure']:,.2f}
 Total Blocked Payments: {metadata['total_blocked_payments']}
-Blocked Payment IDs: {', '.join(metadata.get('blocked_payment_ids', []))}
 Decision Status: {metadata['decision']} ({metadata.get('integrity_label', '')})
 
 Duplicate Payments: {metadata['duplicate_count']}
-  └─ Invoice: {metadata.get('duplicate_invoice_number', 'N/A')}
-  └─ Payment ID: {metadata.get('duplicate_payment_id', 'N/A')}
-  └─ Amount: ${metadata.get('duplicate_amount', 0):,.2f}
-  └─ Previously paid: {metadata.get('duplicate_days_ago', 'N/A')} days ago
-
 Unapproved Payments: {metadata['approval_failures']}
-  └─ Payment IDs: {', '.join(metadata.get('unapproved_payment_ids', []))}
-
 Vendor Issues: {metadata['vendor_issues']}
-  └─ Payment ID: {metadata.get('invalid_vendor_payment_id', 'N/A')}
-  └─ Vendor Name: {metadata.get('invalid_vendor_name', 'N/A')}
-
+Vendor Validation Issues: {metadata['vendor_issues']}
 Amount Mismatches: {metadata['amount_mismatches']}
-  └─ Payment ID: {metadata.get('amount_mismatch_payment_id', 'N/A')}
-  └─ Submitted: ${metadata.get('amount_mismatch_uploaded', 0):,.2f}
-  └─ Approved: ${metadata.get('amount_mismatch_approved', 0):,.2f}
-  └─ Difference: ${metadata.get('amount_mismatch_difference', 0):,.2f}
-
-Routing Issues: {metadata['routing_issues']}
-Discount Opportunities: {metadata['discount_opportunities']}
+Bank Routing Exceptions: {metadata['routing_issues']}
 Discounts available: {metadata.get('discount_available_count', 0)}
 Discounts missed: {metadata.get('discount_missed_count', 0)}
 """
@@ -119,10 +103,17 @@ def build_llm_prompt(metadata):
         band_guidance,
     ) = _derive_score_fields(metadata)
 
+    if integrity_score >= 85:
+        cfo_review_posture = "Low Risk — Authorization Review"
+    elif integrity_score >= 70:
+        cfo_review_posture = "Medium Risk — Controlled Exception Review"
+    else:
+        cfo_review_posture = "High Risk — Escalated Mitigation Review"
+
     return f"""
 You are a Senior Treasury Controller preparing an executive payment risk assessment for the Chief Financial Officer (CFO).
 
-The payment validation has already been completed by a deterministic financial control engine. Your responsibility is ONLY to convert the validated financial metrics into a strategic executive treasury risk narrative in professional financial terms to assist the CFO in making a payment authorization decision.
+The payment validation is already completed by a deterministic control engine. Your only job is to write a concise CFO-ready batch-level treasury risk summary from the validated aggregate metrics.
 
 ==========================================================
 NON-NEGOTIABLE RULES
@@ -130,10 +121,10 @@ NON-NEGOTIABLE RULES
 - NEVER invent, estimate, infer, calculate or modify any numerical value.
 - NEVER change the recommended action.
 - NEVER change the risk classification.
-- NEVER narrate individual invoice numbers, payment IDs, vendor IDs or specific transaction details one by one.
-- Speak ONLY at the payment batch level.
-- Group findings by control category using aggregate counts only (e.g., "3 duplicate payment exceptions").
-- Produce plain text only (one paragraph, no markdown, no bullet points, max 8 sentences).
+- NEVER mention invoice numbers, payment IDs, vendor IDs, vendor names, bank/routing details, or any individual transaction.
+- NEVER use specific-instance wording such as "a specific instance", "one notable invoice", or "the affected vendor".
+- Use ONLY aggregate batch-level counts and control categories.
+- Produce plain text only: one paragraph, no markdown, no bullets, maximum 6 sentences.
 
 ==========================================================
 VALIDATED EXECUTIVE METRICS
@@ -141,6 +132,7 @@ VALIDATED EXECUTIVE METRICS
 Batch Integrity Score: {integrity_score:.1f} out of 100
 Financial Risk: {financial_risk:.1f}%
 Risk Classification: {risk_band}
+CFO Review Posture: {cfo_review_posture}
 Recommended Action: {recommended_action}
 Total Batch Value: ${metadata['total_batch_amount']:,.2f}
 High Risk Exposure: ${metadata['high_risk_exposure']:,.2f}
@@ -152,63 +144,28 @@ Vendor Validation Issues: {metadata['vendor_issues']}
 Amount Validation Issues: {metadata['amount_mismatches']}
 Bank Routing Exceptions: {metadata['routing_issues']}
 
-
-***REMEDIATION LANGUAGE***:
-- Do not use generic remediation phrases such as "implement targeted remediation measures", "address these vulnerabilities", or "strengthen controls" without naming the control categories.
-- Remediation must stay aggregate-level and category-level.
-- Preferred wording: "Remediation should focus on duplicate-payment controls, approval enforcement, vendor validation, amount-matching, and routing verification."
-- Only include categories that are relevant to the non-zero exception counts.
-
 ==========================================================
 YOUR TASK
 ==========================================================
-Write an executive treasury assessment narrative for the CFO in professional financial/treasury terms. One paragraph, plain text, no markdown, no bullet points, maximum 8 sentences.
+Write a short, crisp, CFO-ready treasury risk summary. Use direct executive language. Do not over-explain.
 
 FOLLOW THESE RULES EXACTLY:
 
-INTEGRITY SCORE — CRITICAL FRAMING RULE:
-- The Batch Integrity Score of {integrity_score:.1f} out of 100 means that {integrity_score:.1f}% of the total payment batch value is considered SAFE for disbursement.
-- The remaining {financial_risk:.1f}% represents the financial risk exposure (blocked or flagged payments).
-- NEVER describe the Integrity Score as a risk indicator, danger signal, or reason for concern by itself.
-- CORRECT example: "The Batch Integrity Score of {integrity_score:.1f} out of 100 indicates that {integrity_score:.1f}% of the batch value is cleared for disbursement, with {financial_risk:.1f}% currently at financial risk exposure."
-- WRONG example: "an integrity score of 69.5 out of 100, indicating a need for immediate attention..."
-
-INDIVIDUAL TRANSACTION IDs — ABSOLUTE BAN:
-- NEVER mention invoice numbers, payment IDs, vendor IDs, vendor names, bank account details, routing numbers, or any individual transaction-level identifier.
-- NEVER refer to a specific invoice, payment, vendor, or transaction as an example.
-- Do not use phrases such as "one notable instance", "a duplicate invoice", "the affected vendor", or any wording that implies a specific transaction.
-- The narrative must scale to thousands of payments and must remain fully aggregate-level.
-- ***WRONG: "one notable instance of a duplicate invoice, INV-80035"***
-- WRONG: "a specific vendor failed validation"
-- CORRECT: "Duplicate-payment exceptions were identified at the batch level"
-- CORRECT: "Vendor validation exceptions were identified in aggregate"
-
-CONTROL EXCEPTIONS — INCLUDE ALL NON-ZERO COUNTS:
-- You MUST include every control category where the count is greater than zero.
-- This includes: Duplicate Payments, Approval Failures, Vendor Issues, Amount Mismatches, AND Bank Routing Exceptions.
-- If Bank Routing Exceptions is greater than 0, it MUST appear in the narrative.
-
-DISCOUNT OBSERVATIONS — TREASURY OPTIMIZATION ONLY:
-- Discount exceptions are treasury optimization items, not payment authorization risk items.
-- If Discounts Available > 0, mention them as treasury optimization opportunities.
-- If Discounts Missed > 0, mention them only as missed treasury optimization opportunities.
-- NEVER describe missed discounts as "financial leakage", "control failure", "loss", "risk exposure", or a reason to block, hold, or flag payments.
-- Use this wording when applicable: "Discount exceptions should be treated as treasury optimization items, separate from payment authorization risk."
-
-CFO REVIEW POSTURE:
-- Score >= 85: LOW RISK — Authorization Review.
-- Score 70–84: MEDIUM RISK — Controlled Exception Review.
-- Score < 70: HIGH RISK — Escalated Mitigation Review.
-- The AI must provide the CFO review posture, not make an independent release, hold, or payment authorization decision.
-- For high-risk batches, use the exact phrase: "High Risk — Escalated Mitigation Review."
+REQUIRED FRAMING:
+- Open with the CFO Review Posture: "{cfo_review_posture}".
+- Frame the Batch Integrity Score as safe-for-disbursement value: {integrity_score:.1f}% cleared, {financial_risk:.1f}% at risk exposure.
+- Include Total Batch Value and High Risk Exposure.
+- Include every non-zero control category using aggregate counts only.
+- Discount exceptions are treasury optimization items only, separate from payment authorization risk.
+- Never use "financial leakage", "potential losses", "control failure" for discounts, or any individual-transaction language.
+- Remediation must be category-level: duplicate-payment controls, approval enforcement, vendor validation, amount-matching, and routing verification.
 
 NARRATIVE STRUCTURE (in this order):
-1. State the CFO review posture using the Risk Classification ({risk_band}) and Recommended Action ({recommended_action}), without making an independent release/hold decision.
-2. State the Integrity Score as % of batch SAFE for disbursement, and the financial risk % exposure.
-3. Give the financial scale: Total Batch Value and High Risk Exposure.
-4. Narrate ALL non-zero control exception categories using only aggregate counts (no individual IDs).
-5. Mention discount observations (available and/or missed) as operational notes if applicable.
-6. Close with a category-level remediation recommendation aligned to the CFO review posture and this guidance: "{band_guidance}"
+1. CFO posture and recommended action.
+2. Integrity score as cleared value and financial risk exposure.
+3. Batch value, high-risk exposure, and aggregate exceptions.
+4. Discount observations as treasury optimization only.
+5. Category-level remediation recommendation aligned to: "{band_guidance}"
 """
 
 # ---------------------------------------------------
@@ -223,37 +180,14 @@ def generate_ai_interpretation(metadata):
             {
                 "role": "system",
                 "content": (
-                    "You are a senior treasury controller and payment risk officer. "
-                    "You write precise, hallucination-free, one-paragraph executive risk "
-                    "assessments for a CFO in professional financial/treasury language. "
-                    "You narrate overall batch-level risk strategy — never individual payments. "
-
-                    "INTEGRITY SCORE FRAMING: The Batch Integrity Score represents the PERCENTAGE "
-                    "OF BATCH VALUE SAFE FOR DISBURSEMENT. A score of 69.5 means 69.5% is safe — "
-                    "it does NOT mean 'high risk' or 'needs immediate attention' by itself. "
-                    "Always frame it as: X% of the batch is cleared for disbursement, Y% is at risk exposure. "
-
-                    "ID BAN: NEVER output invoice numbers, payment IDs, vendor IDs, vendor names, "
-                    "bank details, routing details, or any individual transaction-level identifier. "
-                    "Never refer to a specific invoice, payment, vendor, or transaction even without naming the ID. "
-                    "Use only aggregate batch-level counts and category-level control language. "
-
-                    "ROUTING: If Bank Routing Exceptions count is greater than 0, you MUST mention it. "
-
-                    "DISCOUNTS: Discount exceptions are treasury optimization items only, separate from "
-                    "payment authorization risk. Never call missed discounts financial leakage, losses, "
-                    "control failures, blockers, or risk exposure. "
-
-                    "RISK TIERS: score >= 85 = LOW RISK safe to release; "
-                    "score 70-84 = MEDIUM RISK review before release; "
-                    "score < 70 = HIGH RISK hold and remediate. "
-
-                    "You never invent, estimate or alter any figure. "
-                    "You never call the Integrity Score a risk score or danger signal."
-
-                    "Remediation language must be specific by control category: duplicate-payment controls, "
-                    "approval enforcement, vendor validation, amount-matching, and routing verification. "
-                    "Do not use vague phrases like 'address these vulnerabilities'. "
+                    "Write one crisp CFO-ready treasury risk paragraph from validated aggregate metrics only. "
+                    "Do not invent, recalculate, or alter figures. "
+                    "Never mention invoice numbers, payment IDs, vendor IDs, vendor names, bank details, routing details, or any specific transaction. "
+                    "Never use specific-instance wording. Use only batch-level counts and control categories. "
+                    "Open with the CFO review posture. Frame Batch Integrity Score only as value cleared for disbursement, with the remainder as financial risk exposure. "
+                    "Discount exceptions are treasury optimization items only, separate from payment authorization risk; never call them leakage, losses, blockers, or control failures. "
+                    "For high risk, use: High Risk — Escalated Mitigation Review. "
+                    "Close with category-level remediation: duplicate-payment controls, approval enforcement, vendor validation, amount-matching, and routing verification."
                 ),
             },
             {"role": "user", "content": prompt},
