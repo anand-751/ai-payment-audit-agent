@@ -1,4 +1,4 @@
-import { T, fmt } from "./constants.js";
+import { T, fmt, parseUTCDate } from "./constants.js";
 
 export const CFOBatchList = ({ batches, onSelect }) => {
   const scoreColor = (s = 100) =>
@@ -239,7 +239,7 @@ export const CFOBatchList = ({ batches, onSelect }) => {
                         color: T.text2,
                       }}
                     >
-                        {b.uploadedAt ? new Date(b.uploadedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : ""}
+                        {b.uploadedAt ? parseUTCDate(b.uploadedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : ""}
                     </div>
                   </div>
 

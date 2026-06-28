@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { T, fmt } from "./constants.js";
+import { T, fmt, parseUTCDate } from "./constants.js";
 
 export const APPortal = ({ batches, onUpload }) => {
   const [files, setFiles] = useState([]);  const [drag, setDrag] = useState(false);
@@ -209,7 +209,7 @@ export const APPortal = ({ batches, onUpload }) => {
                     <div
                       style={{ fontFamily: T.mono, fontSize: 9, color: T.text2 }}
                     >
-                      {b.uploadedAt ? new Date(b.uploadedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : ""}
+                      {b.uploadedAt ? parseUTCDate(b.uploadedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : ""}
                     </div>
                   </div>
                   <span

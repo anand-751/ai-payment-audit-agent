@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { T, fmt, fmtFull } from "./constants.js";
+import { T, fmt, fmtFull, parseUTCDate } from "./constants.js";
 
 const formatISTDateTime = (date) => {
   try {
@@ -221,7 +221,7 @@ export const CFODashboard = ({ batch, apiBase, user, onBack, onDecision }) => {
               marginBottom: 6,
             }}
           >
-            {metadata.batch_id} · Uploaded {batch.uploadedAt ? new Date(batch.uploadedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : ""} by{" "}
+            {metadata.batch_id} · Uploaded {batch.uploadedAt ? parseUTCDate(batch.uploadedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : ""} by{" "}
             {batch.uploadedBy}
           </div>
           <div

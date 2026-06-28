@@ -146,3 +146,17 @@ export const fmtFull = (n) =>
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       });
+
+export const parseUTCDate = (dateStr) => {
+  if (!dateStr) return null;
+  if (dateStr instanceof Date) return dateStr;
+  
+  if (typeof dateStr === "string") {
+    let s = dateStr.trim();
+    if (!s.endsWith("Z") && !s.includes("+") && !s.includes("GMT") && s.length > 10) {
+      s = s.replace(" ", "T") + "Z";
+    }
+    return new Date(s);
+  }
+  return new Date(dateStr);
+};

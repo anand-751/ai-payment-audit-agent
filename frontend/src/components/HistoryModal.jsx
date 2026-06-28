@@ -1,4 +1,4 @@
-import { T } from "./constants.js";
+import { T, parseUTCDate } from "./constants.js";
 
 export const HistoryModal = ({ rows, onClose }) => (
   <div
@@ -198,7 +198,7 @@ export const HistoryModal = ({ rows, onClose }) => (
                         fontSize: 10,
                     }}
                     >
-                    {row.decided_at ? new Date(row.decided_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : ""}
+                    {row.decided_at ? parseUTCDate(row.decided_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : ""}
                     </div>
                 </div>
                 </div>
