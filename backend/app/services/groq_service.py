@@ -152,6 +152,13 @@ Vendor Validation Issues: {metadata['vendor_issues']}
 Amount Validation Issues: {metadata['amount_mismatches']}
 Bank Routing Exceptions: {metadata['routing_issues']}
 
+
+***REMEDIATION LANGUAGE***:
+- Do not use generic remediation phrases such as "implement targeted remediation measures", "address these vulnerabilities", or "strengthen controls" without naming the control categories.
+- Remediation must stay aggregate-level and category-level.
+- Preferred wording: "Remediation should focus on duplicate-payment controls, approval enforcement, vendor validation, amount-matching, and routing verification."
+- Only include categories that are relevant to the non-zero exception counts.
+
 ==========================================================
 YOUR TASK
 ==========================================================
@@ -167,32 +174,41 @@ INTEGRITY SCORE — CRITICAL FRAMING RULE:
 - WRONG example: "an integrity score of 69.5 out of 100, indicating a need for immediate attention..."
 
 INDIVIDUAL TRANSACTION IDs — ABSOLUTE BAN:
-- NEVER mention any invoice number, payment ID, vendor ID, vendor name, or any individual transaction identifier in the output.
-- WRONG: "one notable instance of a duplicate invoice, INV-80035"
-- CORRECT: "40 duplicate payment exceptions have been identified"
+- NEVER mention invoice numbers, payment IDs, vendor IDs, vendor names, bank account details, routing numbers, or any individual transaction-level identifier.
+- NEVER refer to a specific invoice, payment, vendor, or transaction as an example.
+- Do not use phrases such as "one notable instance", "a duplicate invoice", "the affected vendor", or any wording that implies a specific transaction.
+- The narrative must scale to thousands of payments and must remain fully aggregate-level.
+- ***WRONG: "one notable instance of a duplicate invoice, INV-80035"***
+- WRONG: "a specific vendor failed validation"
+- CORRECT: "Duplicate-payment exceptions were identified at the batch level"
+- CORRECT: "Vendor validation exceptions were identified in aggregate"
 
 CONTROL EXCEPTIONS — INCLUDE ALL NON-ZERO COUNTS:
 - You MUST include every control category where the count is greater than zero.
 - This includes: Duplicate Payments, Approval Failures, Vendor Issues, Amount Mismatches, AND Bank Routing Exceptions.
 - If Bank Routing Exceptions is greater than 0, it MUST appear in the narrative.
 
-DISCOUNT OBSERVATIONS — OPERATIONAL ONLY:
-- If Discounts Available > 0, mention it as a positive operational observation.
-- If Discounts Missed > 0, mention it as a missed opportunity observation.
-- Discounts are NEVER a reason to block, hold, or flag a payment.
+DISCOUNT OBSERVATIONS — TREASURY OPTIMIZATION ONLY:
+- Discount exceptions are treasury optimization items, not payment authorization risk items.
+- If Discounts Available > 0, mention them as treasury optimization opportunities.
+- If Discounts Missed > 0, mention them only as missed treasury optimization opportunities.
+- NEVER describe missed discounts as "financial leakage", "control failure", "loss", "risk exposure", or a reason to block, hold, or flag payments.
+- Use this wording when applicable: "Discount exceptions should be treated as treasury optimization items, separate from payment authorization risk."
 
-RISK STRATEGY FRAMING:
-- Score >= 85: LOW RISK — safe to release. CFO may accept residual exceptions via management comments.
-- Score 70–84: MEDIUM RISK — review flagged exceptions before authorizing.
-- Score < 70: HIGH RISK — batch must be held; strict remediation required before any release.
+CFO REVIEW POSTURE:
+- Score >= 85: LOW RISK — Authorization Review.
+- Score 70–84: MEDIUM RISK — Controlled Exception Review.
+- Score < 70: HIGH RISK — Escalated Mitigation Review.
+- The AI must provide the CFO review posture, not make an independent release, hold, or payment authorization decision.
+- For high-risk batches, use the exact phrase: "High Risk — Escalated Mitigation Review."
 
 NARRATIVE STRUCTURE (in this order):
-1. State the Recommended Action ({recommended_action}) and Risk Classification ({risk_band}).
+1. State the CFO review posture using the Risk Classification ({risk_band}) and Recommended Action ({recommended_action}), without making an independent release/hold decision.
 2. State the Integrity Score as % of batch SAFE for disbursement, and the financial risk % exposure.
 3. Give the financial scale: Total Batch Value and High Risk Exposure.
 4. Narrate ALL non-zero control exception categories using only aggregate counts (no individual IDs).
 5. Mention discount observations (available and/or missed) as operational notes if applicable.
-6. Close with the strategic treasury recommendation aligned to: "{band_guidance}"
+6. Close with a category-level remediation recommendation aligned to the CFO review posture and this guidance: "{band_guidance}"
 """
 
 # ---------------------------------------------------
@@ -217,13 +233,16 @@ def generate_ai_interpretation(metadata):
                     "it does NOT mean 'high risk' or 'needs immediate attention' by itself. "
                     "Always frame it as: X% of the batch is cleared for disbursement, Y% is at risk exposure. "
 
-                    "ID BAN: NEVER output any invoice number, payment ID, vendor ID, vendor name, "
-                    "or any individual transaction identifier. Use only aggregate counts per category. "
+                    "ID BAN: NEVER output invoice numbers, payment IDs, vendor IDs, vendor names, "
+                    "bank details, routing details, or any individual transaction-level identifier. "
+                    "Never refer to a specific invoice, payment, vendor, or transaction even without naming the ID. "
+                    "Use only aggregate batch-level counts and category-level control language. "
 
                     "ROUTING: If Bank Routing Exceptions count is greater than 0, you MUST mention it. "
 
-                    "DISCOUNTS: If discounts available or missed are > 0, mention both as operational "
-                    "observations only — never as payment blockers. "
+                    "DISCOUNTS: Discount exceptions are treasury optimization items only, separate from "
+                    "payment authorization risk. Never call missed discounts financial leakage, losses, "
+                    "control failures, blockers, or risk exposure. "
 
                     "RISK TIERS: score >= 85 = LOW RISK safe to release; "
                     "score 70-84 = MEDIUM RISK review before release; "
@@ -231,6 +250,10 @@ def generate_ai_interpretation(metadata):
 
                     "You never invent, estimate or alter any figure. "
                     "You never call the Integrity Score a risk score or danger signal."
+
+                    "Remediation language must be specific by control category: duplicate-payment controls, "
+                    "approval enforcement, vendor validation, amount-matching, and routing verification. "
+                    "Do not use vague phrases like 'address these vulnerabilities'. "
                 ),
             },
             {"role": "user", "content": prompt},
