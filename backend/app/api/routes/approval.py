@@ -136,7 +136,7 @@ async def get_active_notifications(role: str = "AP_MANAGER", user: str = None, d
                  AND (n.recipient_user = ? OR n.recipient_user IS NULL)
                  AND n.is_read = 0
                ORDER BY n.created_at DESC
-               LIMIT 5""",
+               LIMIT 3""",
             (role, user)
         )
         
