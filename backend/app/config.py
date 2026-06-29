@@ -3,7 +3,8 @@ from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_DB = BASE_DIR / "db" / "payment_audit.db"
+
+DEFAULT_DB = BASE_DIR / "db" / "payment_audit.seed.db"
 
 
 class Settings(BaseSettings):
