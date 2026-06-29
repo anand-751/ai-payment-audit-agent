@@ -21,21 +21,32 @@ client = OpenAI(
     base_url="https://api.groq.com/openai/v1",
 )
 
+# ---------------------------------------------------
+# IDENTIFIER SAFETY LAYER
+# ---------------------------------------------------
 # Transaction-level identifiers that must NEVER reach the LLM.
+# Everything else in metadata (counts, totals, reasons-without-IDs) is
+# aggregate-level and safe to pass through as-is.
 _FORBIDDEN_LLM_KEYS = (
     "duplicate_invoice_number",
     "duplicate_payment_id",
+    "duplicate_info",                 # nested dict containing invoice_number
     "blocked_payment_ids",
     "unapproved_payment_ids",
     "invalid_vendor_payment_id",
     "invalid_vendor_name",
     "amount_mismatch_payment_id",
-    "discount_details",
+    "discount_details",               # list[dict] containing payment_id
+    "violations",                     # raw violation rows; reasons can carry IDs
 )
 
 
 def _safe_metadata_for_llm(metadata):
-    """Return a copy with all transaction-level identifiers stripped out."""
+    """Return a copy with all transaction-level identifiers stripped out.
+
+    Only removes the specific keys above. Aggregate counts/totals/labels
+    pass through untouched.
+    """
     return {k: v for k, v in metadata.items() if k not in _FORBIDDEN_LLM_KEYS}
 
 
@@ -198,11 +209,20 @@ def generate_ai_interpretation(metadata):
 
 
 def sanitize_cfo_narrative(text):
-    """Final safety pass: scrub identifiers/banned wording without dropping sentences."""
-    # invoice phrases -> safe aggregate label
-    text = re.sub(r"\binvoice(?:\s+number)?\s+[A-Z0-9\-]+",
+    """Final safety net on the OUTPUT side: scrub any identifier that the
+    model might still produce (e.g. by inventing a plausible-looking one),
+    without dropping surrounding sentences.
+
+    This runs in addition to — not instead of — the input-side scrub in
+    `_safe_metadata_for_llm`. The prompt no longer contains real invoice
+    numbers, so this mainly guards against hallucinated identifiers.
+    """
+    # explicit "invoice <code>" or "invoice number <code>" phrasing
+    text = re.sub(r"\binvoice(?:\s+number)?\s+[A-Za-z0-9\-_]+",
                   "the affected invoice group", text, flags=re.IGNORECASE)
-    # any leftover identifier codes (INV-88219, PAY_12, VEN-7)
+    # identifier-style codes: INV-88219, PAY_12, VEN-7, etc.
+    text = re.sub(r"\b(?:INV|PAY|VEN|REF|TXN)[-_ ]?\w+\b", "", text, flags=re.IGNORECASE)
+    # generic CODE-1234 style identifiers
     text = re.sub(r"\b[A-Z]{2,}[-_ ]?\d{2,}\b", "", text)
     # banned approximation words
     text = re.sub(r"\b(approximately|around|about|estimated|roughly)\s+", "",
@@ -212,7 +232,7 @@ def sanitize_cfo_narrative(text):
                   "treasury optimization opportunity", text, flags=re.IGNORECASE)
     text = re.sub(r"\bpotential losses\b", "authorization risk exposure",
                   text, flags=re.IGNORECASE)
-    # tidy whitespace/punctuation
+    # tidy whitespace/punctuation left behind by the strips above
     text = re.sub(r"\s{2,}", " ", text)
     text = re.sub(r"\s+([,.])", r"\1", text)
     return text.strip()
@@ -448,14 +468,18 @@ def validate_payment_batch(batch_id):
 
     # Do not enrich CFO metadata with duplicate invoice/payment details.
     # CFO summaries must remain aggregate-level and scalable to large batches.
+    # (duplicate_info itself is intentionally never written into `metadata` —
+    # it exists only for potential internal/UI use, never for the LLM path.)
 
-    # Enrich unapproved payment IDs (internal use only; stripped before LLM)
+    # Enrich unapproved payment IDs (internal use only; stripped before LLM
+    # by both the key-name filter AND the nested-structure drop in
+    # `_safe_metadata_for_llm`)
     metadata["unapproved_payment_ids"] = list({
         v["payment_id"] for v in violations
         if v["violation_type"] == "MISSING_APPROVAL"
     })
 
-    # Enrich amount mismatch details
+    # Enrich amount mismatch details (internal use only; stripped before LLM)
     amt_v = next(
         (v for v in violations if v["violation_type"] == "AMOUNT_MISMATCH"),
         None
@@ -474,7 +498,7 @@ def validate_payment_batch(batch_id):
         except Exception:
             pass
 
-    # Enrich invalid vendor details
+    # Enrich invalid vendor details (internal use only; stripped before LLM)
     inv_v = next(
         (v for v in violations if v["violation_type"] == "INVALID_VENDOR"),
         None
