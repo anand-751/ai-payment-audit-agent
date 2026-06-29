@@ -362,9 +362,8 @@ pytest tests/ -v
 
 | Name | GitHub | Role |
 | --- | --- | --- |
-| Team Member 1 | [@handle](https://github.com/handle) | Role |
-| Team Member 2 | [@handle](https://github.com/handle) | Role |
-| Team Member 3 | [@handle](https://github.com/handle) | Role |
+| Anand Choudhary | [@anand-751](https://github.com/anandchoudhary-751) | Developer |
+| Chirag Singh | [@handle](https://github.com/Chirag008102002Singh) | Developer |
 
 Built during the **AuxiLab Founding Hackathon** by [Auxiliobits Technologies](https://auxiliobits.com/).
 
