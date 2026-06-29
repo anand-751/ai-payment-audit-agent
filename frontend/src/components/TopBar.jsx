@@ -1,5 +1,5 @@
 import { T } from "./constants.js";
-​
+
 export const TopBar = ({
   user,
   onBack,
@@ -15,7 +15,30 @@ export const TopBar = ({
   const unread = notifications.filter((n) => !n.is_read);
   const unreadCount = unread.length;
   const visibleNotifications = unread.slice(0, 5);
-​
+
+  // Resolve the REAL decision per notification instead of hardcoding a label.
+  const resolveDecision = (n) => {
+    const raw = (n.decision || n.status || "").toString().toUpperCase();
+    if (raw.includes("APPROV") || raw.includes("AUTHORIZE")) return "APPROVED";
+    if (raw.includes("REJECT") || raw.includes("DECLINE")) return "REJECTED";
+    return "";
+  };
+
+  const decisionLabel = (n) => {
+    if (n.message) return n.message;
+    const d = resolveDecision(n);
+    if (d === "APPROVED") return "Approved by CFO";
+    if (d === "REJECTED") return "Rejected by CFO";
+    return "Update from CFO";
+  };
+
+  const decisionColor = (n) => {
+    const d = resolveDecision(n);
+    if (d === "APPROVED") return T.green;
+    if (d === "REJECTED") return T.red;
+    return T.text2;
+  };
+
   return (
     <div
       style={{
@@ -51,7 +74,7 @@ export const TopBar = ({
             ← BACK
           </button>
         )}
-​
+
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {/* Animated status dot */}
           <div style={{ position: "relative" }}>
@@ -92,7 +115,7 @@ export const TopBar = ({
           </span>
         </div>
       </div>
-​
+
       {/* RIGHT */}
       <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
         {/* Bell — AP only */}
@@ -162,16 +185,8 @@ export const TopBar = ({
                             >
                             {n.fileName || n.file_name || n.file || n.batchNo || n.batch_id}
                             </div>
-​
-                            <div
-                            style={{
-                                fontFamily: T.mono,
-                                fontSize: 9,
-                                color: T.red,
-                            }}
-                            >
-                            Rejected by CFO
-                        </div>
+
+                            <div style={{ fontFamily: T.mono, fontSize: 9, color: decisionColor(n) }}>{decisionLabel(n)}</div>
                     </div>
                   ))
                 )}
@@ -195,7 +210,7 @@ export const TopBar = ({
                 </div>
               </div>
             )}
-​
+
             {unreadCount > 0 && !showNotifications && (
               <span
                 style={{
@@ -221,13 +236,13 @@ export const TopBar = ({
             )}
           </div>
         )}
-​
+
         <span
           style={{ fontFamily: T.mono, fontSize: 10, color: T.text2 }}
         >
           {user?.name?.toUpperCase()}
         </span>
-​
+
         {/* <button
           onClick={onSwitch}
           className="hov-btn"
@@ -243,7 +258,7 @@ export const TopBar = ({
         >
           SWITCH ROLE
         </button> */}
-​
+
         <button
           onClick={onLogout}
           className="hov-btn"
