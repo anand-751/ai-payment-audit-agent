@@ -1,3 +1,4 @@
+print(">>> GROQ SERVICE LIVE BUILD v999 SANITIZER ACTIVE <<<")
 import os
 import re
 from datetime import datetime
