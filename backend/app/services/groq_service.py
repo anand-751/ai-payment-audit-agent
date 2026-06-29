@@ -195,7 +195,7 @@ def generate_ai_interpretation(metadata):
                 {"role": "user", "content": prompt},
             ],
             temperature=0.1,
-            max_tokens=400,
+            max_tokens=420,
         )
         print("RAW LLM OUTPUT:", response.choices[0].message.content.strip())
         return sanitize_cfo_narrative(response.choices[0].message.content.strip())
