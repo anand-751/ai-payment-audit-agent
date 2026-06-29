@@ -30,14 +30,14 @@ client = OpenAI(
 _FORBIDDEN_LLM_KEYS = (
     "duplicate_invoice_number",
     "duplicate_payment_id",
-    "duplicate_info",                 # nested dict containing invoice_number
+    "duplicate_info",                 
     "blocked_payment_ids",
     "unapproved_payment_ids",
     "invalid_vendor_payment_id",
     "invalid_vendor_name",
     "amount_mismatch_payment_id",
-    "discount_details",               # list[dict] containing payment_id
-    "violations",                     # raw violation rows; reasons can carry IDs
+    "discount_details",              
+    "violations",                     
 )
 
 
@@ -194,9 +194,10 @@ def generate_ai_interpretation(metadata):
                 },
                 {"role": "user", "content": prompt},
             ],
-            temperature=0.2,
-            max_tokens=450,
+            temperature=0.1,
+            max_tokens=400,
         )
+        print("RAW LLM OUTPUT:", response.choices[0].message.content.strip())
         return sanitize_cfo_narrative(response.choices[0].message.content.strip())
     except Exception as exc:
         # Never let a model/network error break the deterministic report.
